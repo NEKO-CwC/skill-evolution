@@ -67,6 +67,50 @@ openclaw plugins info skill-evolution
 openclaw plugins doctor
 ```
 
+## 卸载指南
+
+### Agent 卸载
+
+```
+Uninstall and clean up the skill-generation plugin of openclaw by removing the configuration and following directories:
+1. Remove `plugins.load.paths` entry for `/home/node/.openclaw/workspace/skill-generation` in `openclaw.json`
+2. Remove `plugins.entries.skill-evolution` and `plugins.installs.skill-evolution` in `openclaw.json`
+3. rm -rf /home/node/.openclaw/workspace/skill-generation
+4. rm -rf /home/node/.openclaw/workspace/.skill-feedback
+5. rm -rf /home/node/.openclaw/workspace/.skill-overlays
+6. rm -rf /home/node/.openclaw/workspace/.skill-patches
+7. rm -rf /home/node/.openclaw/workspace/test-skill-evolution
+8. rm -rf /home/node/.openclaw/workspace/test_skill
+```
+
+### Human 卸载
+
+Skill-Evolution 插件卸载需要清理配置和相关残余文件。
+
+**Step 1: 从 openclaw.json 移除配置**
+- 删除 `plugins.load.paths` 中的 `skill-generation` 路径
+- 删除 `plugins.entries.skill-evolution` 完整条目
+- 删除 `plugins.installs.skill-evolution` 完整条目
+
+**Step 2: 删除插件源码与测试目录**
+```bash
+# 工作空间根目录下执行
+rm -rf skill-generation
+rm -rf test-skill-evolution
+rm -rf test_skill
+```
+
+**Step 3: 删除运行时数据**
+```bash
+# 工作空间根目录下执行
+rm -rf .skill-feedback
+rm -rf .skill-overlays
+rm -rf .skill-patches
+```
+
+**Step 4: 重启检查**
+重启 Gateway 使配置生效。检查 `openclaw.json`、workspace 下的 `.skill-*` 目录是否清理干净，确认日志中无 "Skill Evolution plugin registered"。
+
 ## 注意事项
 
 * 这是 **plugin，不是 skill**
