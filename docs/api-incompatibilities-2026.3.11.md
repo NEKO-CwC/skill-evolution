@@ -8,7 +8,7 @@
 
 ## Executive Summary
 
-The OpenClaw plugin API after v2026.3.11 has **4 critical breaking changes** compared to the current `skill-generation` plugin implementation:
+The OpenClaw plugin API after v2026.3.11 has **4 critical breaking changes** compared to the current `skill-evolution` plugin implementation:
 
 1. **Config access method changed**: `api.getConfig()` → `api.pluginConfig`
 2. **Hook event field renamed**: `event.tool` → `event.toolName`
@@ -20,7 +20,7 @@ The OpenClaw plugin API after v2026.3.11 has **4 critical breaking changes** com
 ## 1. Config Access: `getConfig()` → `pluginConfig`
 
 ### Current Implementation (WRONG)
-**Evidence** ([src/openclaw.ts#L25](https://github.com/NEKO-CwC/skill-generation/blob/master/src/openclaw.ts#L25)):
+**Evidence** ([src/openclaw.ts#L25](https://github.com/NEKO-CwC/skill-evolution/blob/master/src/openclaw.ts#L25)):
 ```typescript
 export default function register(api: OpenClawPluginAPI): void {
   const rawConfig = api.getConfig();  // ❌ WRONG
@@ -28,7 +28,7 @@ export default function register(api: OpenClawPluginAPI): void {
 }
 ```
 
-**Evidence** ([src/shared/types.ts#L162](https://github.com/NEKO-CwC/skill-generation/blob/master/src/shared/types.ts#L162)):
+**Evidence** ([src/shared/types.ts#L162](https://github.com/NEKO-CwC/skill-evolution/blob/master/src/shared/types.ts#L162)):
 ```typescript
 export interface OpenClawPluginAPI {
   getConfig(): Record<string, unknown>;  // ❌ WRONG
@@ -85,14 +85,14 @@ const rawConfig = api.pluginConfig;
 ## 2. `after_tool_call` Event Shape: `event.tool` → `event.toolName`
 
 ### Current Implementation (WRONG)
-**Evidence** ([src/openclaw.ts#L74](https://github.com/NEKO-CwC/skill-generation/blob/master/src/openclaw.ts#L74)):
+**Evidence** ([src/openclaw.ts#L74](https://github.com/NEKO-CwC/skill-evolution/blob/master/src/openclaw.ts#L74)):
 ```typescript
 api.on('after_tool_call', async (event: AfterToolCallEvent) => {
   const toolName = event.tool ?? 'unknown';  // ❌ WRONG: uses `event.tool`
 });
 ```
 
-**Evidence** ([src/shared/types.ts#L195-L200](https://github.com/NEKO-CwC/skill-generation/blob/master/src/shared/types.ts#L195-L200)):
+**Evidence** ([src/shared/types.ts#L195-L200](https://github.com/NEKO-CwC/skill-evolution/blob/master/src/shared/types.ts#L195-L200)):
 ```typescript
 export interface AfterToolCallEvent {
   tool: string;  // ❌ WRONG: field name is `tool`
@@ -148,7 +148,7 @@ const toolName = event.toolName ?? 'unknown';
 ## 3. `after_tool_call` Context Type: `PluginHookToolContext`
 
 ### Current Implementation (WRONG)
-**Evidence** ([src/shared/types.ts#L169-L173](https://github.com/NEKO-CwC/skill-generation/blob/master/src/shared/types.ts#L169-L173)):
+**Evidence** ([src/shared/types.ts#L169-L173](https://github.com/NEKO-CwC/skill-evolution/blob/master/src/shared/types.ts#L169-L173)):
 ```typescript
 export interface PluginHookAgentContext {
   sessionId: string;  // Used for all hooks
@@ -198,7 +198,7 @@ api.on('after_tool_call', async (
 ## 4. `message_received` Event Shape
 
 ### Current Implementation (POSSIBLY WRONG)
-**Evidence** ([src/shared/types.ts#L207-L211](https://github.com/NEKO-CwC/skill-generation/blob/master/src/shared/types.ts#L207-L211)):
+**Evidence** ([src/shared/types.ts#L207-L211](https://github.com/NEKO-CwC/skill-evolution/blob/master/src/shared/types.ts#L207-L211)):
 ```typescript
 export interface MessageReceivedEvent {
   message: string;  // ❌ Unclear if this field exists
@@ -248,7 +248,7 @@ const message = event.content ?? '';
 ## 5. `agent_end` Event Shape
 
 ### Current Implementation (POSSIBLY WRONG)
-**Evidence** ([src/shared/types.ts#L218-L221](https://github.com/NEKO-CwC/skill-generation/blob/master/src/shared/types.ts#L218-L221)):
+**Evidence** ([src/shared/types.ts#L218-L221](https://github.com/NEKO-CwC/skill-evolution/blob/master/src/shared/types.ts#L218-L221)):
 ```typescript
 export interface AgentEndEvent {
   summary?: string;  // ❌ Unverified field
@@ -278,7 +278,7 @@ agent_end: (
 ### Impact
 Your plugin doesn't read any fields from `agent_end` event — you only use `ctx.sessionId`:
 
-**Evidence** ([src/openclaw.ts#L95-L99](https://github.com/NEKO-CwC/skill-generation/blob/master/src/openclaw.ts#L95-L99)):
+**Evidence** ([src/openclaw.ts#L95-L99](https://github.com/NEKO-CwC/skill-evolution/blob/master/src/openclaw.ts#L95-L99)):
 ```typescript
 api.on('agent_end', async (_event: AgentEndEvent, ctx: PluginHookAgentContext) => {
   const sessionId = ctx.sessionId;
@@ -293,12 +293,12 @@ This will continue to work because `ctx.sessionId` is present in `PluginHookAgen
 ## 6. `before_prompt_build` Return Type (CORRECT ✅)
 
 ### Current Implementation (CORRECT ✅)
-**Evidence** ([src/openclaw.ts#L65](https://github.com/NEKO-CwC/skill-generation/blob/master/src/openclaw.ts#L65)):
+**Evidence** ([src/openclaw.ts#L65](https://github.com/NEKO-CwC/skill-evolution/blob/master/src/openclaw.ts#L65)):
 ```typescript
 return { prependSystemContext: overlayText };  // ✅ CORRECT
 ```
 
-**Evidence** ([src/shared/types.ts#L183-L188](https://github.com/NEKO-CwC/skill-generation/blob/master/src/shared/types.ts#L183-L188)):
+**Evidence** ([src/shared/types.ts#L183-L188](https://github.com/NEKO-CwC/skill-evolution/blob/master/src/shared/types.ts#L183-L188)):
 ```typescript
 export interface BeforePromptBuildResult {
   prependSystemContext?: string;  // ✅ CORRECT
@@ -332,14 +332,14 @@ api.on("before_prompt_build", async () => ({
 
 ## Summary: Required Changes
 
-| Area | Current | Correct | Breaking? |
-|------|---------|---------|-----------|
-| Config access | `api.getConfig()` | `api.pluginConfig` | ✅ **YES** |
-| `after_tool_call` event | `event.tool` | `event.toolName` | ✅ **YES** |
-| `after_tool_call` result | `event.result: string` | `event.result: unknown` | ⚠️ Minor |
-| `message_received` event | `event.message` | `event.content` | ✅ **YES** |
-| `agent_end` event | `event.summary?` | `event.messages, success, error, durationMs` | ⚠️ Minor (you don't use it) |
-| `before_prompt_build` return | `prependSystemContext` | `prependSystemContext` | ✅ **CORRECT** |
+| Area                         | Current                | Correct                                      | Breaking?                  |
+| ---------------------------- | ---------------------- | -------------------------------------------- | -------------------------- |
+| Config access                | `api.getConfig()`      | `api.pluginConfig`                           | ✅ **YES**                  |
+| `after_tool_call` event      | `event.tool`           | `event.toolName`                             | ✅ **YES**                  |
+| `after_tool_call` result     | `event.result: string` | `event.result: unknown`                      | ⚠️ Minor                    |
+| `message_received` event     | `event.message`        | `event.content`                              | ✅ **YES**                  |
+| `agent_end` event            | `event.summary?`       | `event.messages, success, error, durationMs` | ⚠️ Minor (you don't use it) |
+| `before_prompt_build` return | `prependSystemContext` | `prependSystemContext`                       | ✅ **CORRECT**              |
 
 ---
 

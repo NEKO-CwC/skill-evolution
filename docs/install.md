@@ -17,7 +17,7 @@ This repository is an **OpenClaw plugin**, **not** a normal skill folder.
 Paste this into your LLM agent session:
 
 ```bash
-Install and configure the OpenClaw plugin "skill-generation" from this repository.
+Install and configure the OpenClaw plugin "skill-evolution" from this repository.
 
 Important constraints:
 1. Treat it as an OpenClaw plugin, NOT a skill.
@@ -37,8 +37,8 @@ Important constraints:
 Clone the repository and install dependencies:
 
 ```bash
-git clone https://github.com/NEKO-CwC/skill-generation.git
-cd skill-generation
+git clone https://github.com/NEKO-CwC/skill-evolution.git
+cd skill-evolution
 npm install
 npm run build
 npm run test
@@ -138,8 +138,8 @@ If the user does not have a specific preference, use the safe default:
 ### Step 1: Install the repository
 
 ```bash
-git clone https://github.com/NEKO-CwC/skill-generation.git
-cd skill-generation
+git clone https://github.com/NEKO-CwC/skill-evolution.git
+cd skill-evolution
 npm install
 npm run build
 npm run test

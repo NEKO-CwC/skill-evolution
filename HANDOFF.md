@@ -1,7 +1,7 @@
 # Skill Evolution Plugin — Handoff Summary
 
 **Date**: 2026-03-15
-**Repo**: `skill-generation` (OpenClaw Skill Evolution Plugin)
+**Repo**: `skill-evolution` (OpenClaw Skill Evolution Plugin)
 **Last commit**: `de76fe2` on `master`
 
 ---
@@ -21,15 +21,15 @@ A TypeScript plugin for OpenClaw that enables SKILL.md files to evolve based on 
 
 ## Recent Fix History (Reverse Chronological)
 
-| Commit | Fix | Root Cause |
-|--------|-----|------------|
-| `de76fe2` | Normalize file permissions | Mode drift (644→755) |
-| `844cfa4` | E2E verification log | Documentation |
-| `8903c6f` | Serialize tool result objects properly | `String(obj)` → `[object Object]` in messageExcerpt |
-| `eccb823` | **Resolve workspace from config at startup** | Gateway restart → `process.cwd()=/app` → wrong feedbackDir → session_end reads empty → review skipped |
-| `aff92e4` | Add `~/.openclaw/` state dir to config candidate paths | LlmRuntimeResolver couldn't find openclaw.json |
-| `859b588` | Infer provider from openclaw.json | Model ID truncation (stripped provider prefix) |
-| `6826914` | Allow fallback workspace to be upgraded by hook context | Workspace binding timing issue |
+| Commit    | Fix                                                     | Root Cause                                                                                            |
+| --------- | ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `de76fe2` | Normalize file permissions                              | Mode drift (644→755)                                                                                  |
+| `844cfa4` | E2E verification log                                    | Documentation                                                                                         |
+| `8903c6f` | Serialize tool result objects properly                  | `String(obj)` → `[object Object]` in messageExcerpt                                                   |
+| `eccb823` | **Resolve workspace from config at startup**            | Gateway restart → `process.cwd()=/app` → wrong feedbackDir → session_end reads empty → review skipped |
+| `aff92e4` | Add `~/.openclaw/` state dir to config candidate paths  | LlmRuntimeResolver couldn't find openclaw.json                                                        |
+| `859b588` | Infer provider from openclaw.json                       | Model ID truncation (stripped provider prefix)                                                        |
+| `6826914` | Allow fallback workspace to be upgraded by hook context | Workspace binding timing issue                                                                        |
 
 ---
 
@@ -59,7 +59,7 @@ The plugin requires this entry in `~/.openclaw/openclaw.json`:
     "entries": {
       "skill-evolution": {
         "enabled": true,
-        "source": "/path/to/skill-generation/src/openclaw.ts",
+        "source": "/path/to/skill-evolution/src/openclaw.ts",
         "config": {
           "enabled": true,
           "workspaceDir": "/home/node/.openclaw/workspace",

@@ -28,8 +28,8 @@
 ### Agent 安装
 
 ```
-Install and configure the skill-generation plugin of openclaw by following the instructions here:
-https://raw.githubusercontent.com/NEKO-CwC/skill-generation/refs/heads/master/docs/install.md
+Install and configure the skill-evolution plugin of openclaw by following the instructions here:
+https://raw.githubusercontent.com/NEKO-CwC/skill-evolution/refs/heads/master/docs/install.md
 ```
 
 ### Human 安装
@@ -43,8 +43,8 @@ https://raw.githubusercontent.com/NEKO-CwC/skill-generation/refs/heads/master/do
 最简流程：
 
 ```bash
-git clone https://github.com/NEKO-CwC/skill-generation.git
-cd skill-generation
+git clone https://github.com/NEKO-CwC/skill-evolution.git
+cd skill-evolution
 npm install
 npm run build
 npm run test
@@ -72,10 +72,10 @@ openclaw plugins doctor
 ### Agent 卸载
 
 ```
-Uninstall and clean up the skill-generation plugin of openclaw by removing the configuration and following directories:
-1. Remove `plugins.load.paths` entry for `/home/node/.openclaw/workspace/skill-generation` in `openclaw.json`
+Uninstall and clean up the skill-evolution plugin of openclaw by removing the configuration and following directories:
+1. Remove `plugins.load.paths` entry for `/home/node/.openclaw/workspace/skill-evolution` in `openclaw.json`
 2. Remove `plugins.entries.skill-evolution` and `plugins.installs.skill-evolution` in `openclaw.json`
-3. rm -rf /home/node/.openclaw/workspace/skill-generation
+3. rm -rf /home/node/.openclaw/workspace/skill-evolution
 4. rm -rf /home/node/.openclaw/workspace/.skill-feedback
 5. rm -rf /home/node/.openclaw/workspace/.skill-overlays
 6. rm -rf /home/node/.openclaw/workspace/.skill-patches
@@ -88,14 +88,14 @@ Uninstall and clean up the skill-generation plugin of openclaw by removing the c
 Skill-Evolution 插件卸载需要清理配置和相关残余文件。
 
 **Step 1: 从 openclaw.json 移除配置**
-- 删除 `plugins.load.paths` 中的 `skill-generation` 路径
+- 删除 `plugins.load.paths` 中的 `skill-evolution` 路径
 - 删除 `plugins.entries.skill-evolution` 完整条目
 - 删除 `plugins.installs.skill-evolution` 完整条目
 
 **Step 2: 删除插件源码与测试目录**
 ```bash
 # 工作空间根目录下执行
-rm -rf skill-generation
+rm -rf skill-evolution
 rm -rf test-skill-evolution
 rm -rf test_skill
 ```

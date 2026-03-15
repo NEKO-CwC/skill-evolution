@@ -9,7 +9,7 @@ describe('plugin/feedback/collector persistence', () => {
   let tempDir: string;
 
   beforeEach(async () => {
-    tempDir = await mkdtemp(join(tmpdir(), 'skill-generation-feedback-'));
+    tempDir = await mkdtemp(join(tmpdir(), 'skill-evolution-feedback-'));
   });
 
   afterEach(async () => {
