@@ -1,0 +1,22 @@
+skillEvolution:
+  enabled: true
+  merge:
+    requireHumanMerge: true
+    maxRollbackVersions: 5
+  sessionOverlay:
+    enabled: true
+    storageDir: ".skill-overlays"
+    injectMode: "system-context"
+    clearOnSessionEnd: true
+  triggers:
+    onToolError: true
+    onUserCorrection: true
+    onSessionEndReview: true
+    onPositiveFeedback: true
+  llm:
+    inheritPrimaryConfig: true
+    modelOverride: null
+    thinkingOverride: null
+  review:
+    minEvidenceCount: 2
+    allowAutoMergeOnLowRiskOnly: false

@@ -1,0 +1,27 @@
+{
+  "name": "skill-evolution",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "pretest": "npm run build",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:single": "vitest run",
+    "lint": "tsc --noEmit"
+  },
+  "dependencies": {
+    "yaml": "^2.8.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.15",
+    "typescript": "^5.9.3",
+    "vitest": "^2.1.8"
+  },
+  "openclaw": {
+    "extensions": [
+      "./src/openclaw.ts"
+    ]
+  }
+}

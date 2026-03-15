@@ -1,0 +1,130 @@
+{
+  "id": "skill-evolution",
+  "name": "Skill Evolution",
+  "description": "Evolves OpenClaw skills from real usage feedback via session overlays, deterministic review, and safe merge with rollback protection.",
+  "version": "0.1.0",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      },
+      "workspaceDir": {
+        "type": "string",
+        "description": "Absolute path to the OpenClaw workspace directory. Feedback, overlays, patches and skills are stored relative to this path. When omitted, the plugin attempts to read agents.defaults.workspace from openclaw.json, then falls back to process.cwd()."
+      },
+      "merge": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "requireHumanMerge": {
+            "type": "boolean",
+            "default": true
+          },
+          "maxRollbackVersions": {
+            "type": "integer",
+            "minimum": 1,
+            "default": 5
+          }
+        }
+      },
+      "sessionOverlay": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "default": true
+          },
+          "storageDir": {
+            "type": "string",
+            "default": ".skill-overlays"
+          },
+          "injectMode": {
+            "type": "string",
+            "enum": [
+              "system-context",
+              "tool-description"
+            ],
+            "default": "system-context"
+          },
+          "clearOnSessionEnd": {
+            "type": "boolean",
+            "default": true
+          }
+        }
+      },
+      "triggers": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "onToolError": {
+            "type": "boolean",
+            "default": true
+          },
+          "onUserCorrection": {
+            "type": "boolean",
+            "default": true
+          },
+          "onSessionEndReview": {
+            "type": "boolean",
+            "default": true
+          },
+          "onPositiveFeedback": {
+            "type": "boolean",
+            "default": true
+          }
+        }
+      },
+      "llm": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "inheritPrimaryConfig": {
+            "type": "boolean",
+            "default": true
+          },
+          "modelOverride": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "thinkingOverride": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "default": null
+          },
+          "provider": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null,
+            "description": "Explicit provider key for routing (e.g. 'openrouter', 'anthropic'). When set, model string is sent verbatim to the API without prefix stripping."
+          }
+        }
+      },
+      "review": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "minEvidenceCount": {
+            "type": "integer",
+            "minimum": 0,
+            "default": 2
+          },
+          "allowAutoMergeOnLowRiskOnly": {
+            "type": "boolean",
+            "default": false
+          }
+        }
+      }
+    }
+  }
+}
