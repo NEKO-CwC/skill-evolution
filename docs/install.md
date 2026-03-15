@@ -22,15 +22,15 @@ Install and configure the OpenClaw plugin "skill-evolution" from this repository
 Important constraints:
 1. Treat it as an OpenClaw plugin, NOT a skill.
 2. Use `openclaw plugins install -l .` for local installation.
-3. Configure it under `plugins.entries.skill-evolution.config`.
-4. Verify with:
-   - `openclaw plugins list`
-   - `openclaw plugins info skill-evolution`
-   - `openclaw plugins doctor`
-5. Do not put this repo into `skills/`.
-6. If overlay injection does not appear during sessions, check:
+3. Write config under `plugins.entries.skill-evolution`.
+4. Put runtime/plugin-specific settings under `plugins.entries.skill-evolution.config`.
+5. Verify both plugin discovery and real runtime behavior.
+6. Do not put this repo into `skills/`.
+7. If overlay injection does not appear during sessions, check:
    `plugins.entries.skill-evolution.hooks.allowPromptInjection`
-```
+8. If your environment provides a config-editing tool (for example `config.patch`), you may use it.
+   Otherwise, edit the OpenClaw config JSON file directly.
+````
 
 ### Manual install
 
@@ -53,9 +53,9 @@ openclaw plugins enable skill-evolution
 
 Then restart OpenClaw / the OpenClaw gateway so config and plugin state are reloaded.
 
-### Verify installation
+### Verify installation and behavior
 
-Run:
+First verify plugin discovery:
 
 ```bash
 openclaw plugins list
@@ -64,6 +64,20 @@ openclaw plugins doctor
 ```
 
 You should see the plugin id `skill-evolution` in the plugin list and info output.
+
+Then run a small real test:
+
+1. Start a session that uses a skill
+2. Trigger a tool error or give a direct correction
+3. Confirm overlay files and feedback logs appear:
+
+   * `.skill-overlays/<session-id>/`
+   * `.skill-feedback/<session-id>.jsonl`
+4. End the session cleanly
+5. Check the result:
+
+   * manual merge mode → patch file queued in `.skill-patches/`
+   * automatic merge mode → skill file updated and backup created in `.skill-backups/`
 
 ---
 
@@ -95,18 +109,19 @@ That means your job is to:
 2. link-install the plugin into OpenClaw
 3. write plugin config into OpenClaw config
 4. restart OpenClaw
-5. verify plugin discovery and behavior
+5. verify plugin discovery
+6. verify actual plugin behavior in a real session
 
-### Step 0: Ask the user these configuration questions
+### Step 0: Resolve configuration preferences
 
-Ask the user:
+Before writing config, determine these preferences from the user if available:
 
-1. **Do you want manual merge or automatic merge?**
+1. **Do they want manual merge or automatic merge?**
 
    * manual → `requireHumanMerge: true`
    * automatic → `requireHumanMerge: false`
 
-2. **Do you want session overlays enabled?**
+2. **Do they want session overlays enabled?**
 
    * yes → `sessionOverlay.enabled: true`
    * no → `sessionOverlay.enabled: false`
@@ -116,24 +131,27 @@ Ask the user:
    * yes → `clearOnSessionEnd: true`
    * no → `clearOnSessionEnd: false`
 
-4. **Do you want prompt injection enabled?**
+4. **Do they want prompt injection enabled?**
 
    * usually yes
    * if no, the plugin will still collect feedback and run review, but overlays will not appear in prompts
 
-5. **Do you want the default storage directories?**
+5. **Do they want the default storage directories?**
 
    * overlays: `.skill-overlays`
    * patches: `.skill-patches`
    * backups: `.skill-backups`
    * feedback logs: `.skill-feedback`
 
-If the user does not have a specific preference, use the safe default:
+If the user does not have a specific preference, use the safe default and continue:
 
 * manual merge
 * overlay enabled
 * clear overlays on session end
 * prompt injection enabled
+* default storage directories
+
+Do not block installation waiting for unnecessary confirmation if the defaults are acceptable.
 
 ### Step 1: Install the repository
 
@@ -166,6 +184,9 @@ Write plugin config into the OpenClaw config file under:
 plugins.entries.skill-evolution
 ```
 
+If your environment provides a config-editing tool, you may use it.
+Otherwise, edit the JSON config file directly.
+
 Use this template:
 
 ```jsonc
@@ -173,11 +194,14 @@ Use this template:
   "plugins": {
     "entries": {
       "skill-evolution": {
+        // OpenClaw plugin registry toggle
         "enabled": true,
         "hooks": {
+          // OpenClaw-level permission for prompt mutation
           "allowPromptInjection": true
         },
         "config": {
+          // Plugin's own feature toggle
           "enabled": true,
           "merge": {
             "requireHumanMerge": true,
@@ -214,7 +238,7 @@ Use this template:
 
 ### Step 4: Restart OpenClaw
 
-After changing plugin config, restart the OpenClaw gateway / process.
+After changing plugin config, restart the OpenClaw gateway / process so config and plugin state are reloaded.
 
 ### Step 5: Verify plugin discovery
 
@@ -226,6 +250,12 @@ openclaw plugins info skill-evolution
 openclaw plugins doctor
 ```
 
+Expected result:
+
+* the plugin id `skill-evolution` appears in the plugin list
+* `openclaw plugins info skill-evolution` loads cleanly
+* `openclaw plugins doctor` reports no install/config errors
+
 ### Step 6: Verify plugin behavior
 
 Run a small real test:
@@ -234,13 +264,16 @@ Run a small real test:
 2. Trigger a tool error or give a direct correction
 3. Confirm overlay files and feedback logs appear:
 
-   * `.skill-overlays/<session-id>/` (overlays)
-   * `.skill-feedback/<session-id>.jsonl` (feedback events)
-4. End the session (triggers `session_end` hook)
+   * `.skill-overlays/<session-id>/`
+   * `.skill-feedback/<session-id>.jsonl`
+4. End the session cleanly so the `session_end` hook runs
 5. Check the result:
 
    * manual merge mode → patch file queued in `.skill-patches/`
    * automatic merge mode → skill file updated and backup created in `.skill-backups/`
+
+Do not stop at plugin discovery only.
+A correct installation should verify both **discovery** and **runtime behavior**.
 
 ---
 
@@ -250,15 +283,34 @@ Run a small real test:
 
 Use these defaults unless the user asks otherwise:
 
-* `enabled: true`
-* `requireHumanMerge: true`
-* `maxRollbackVersions: 5`
+* `plugins.entries.skill-evolution.enabled: true`
+* `plugins.entries.skill-evolution.hooks.allowPromptInjection: true`
+* `plugins.entries.skill-evolution.config.enabled: true`
+* `merge.requireHumanMerge: true`
+* `merge.maxRollbackVersions: 5`
 * `sessionOverlay.enabled: true`
 * `sessionOverlay.injectMode: "system-context"`
-* `clearOnSessionEnd: true`
-* `minEvidenceCount: 2`
+* `sessionOverlay.clearOnSessionEnd: true`
+* `review.minEvidenceCount: 2`
+* `review.allowAutoMergeOnLowRiskOnly: false`
 
 ## What each setting means
+
+### `plugins.entries.skill-evolution.enabled`
+
+This is the **OpenClaw plugin registry toggle**.
+
+* `true`: OpenClaw loads the plugin entry
+* `false`: OpenClaw does not activate the plugin
+
+### `plugins.entries.skill-evolution.config.enabled`
+
+This is the plugin's **own feature toggle**.
+
+* `true`: plugin logic is enabled
+* `false`: plugin is loaded by OpenClaw, but its own behavior is disabled
+
+These two `enabled` fields are different and both matter.
 
 ### `merge.requireHumanMerge`
 
@@ -273,9 +325,24 @@ Maximum number of previous skill versions to keep per skill.
 
 Whether temporary session-local overlay behavior is enabled.
 
+### `sessionOverlay.injectMode`
+
+Controls how overlay guidance is injected into prompt construction.
+
+Recommended default:
+
+```jsonc
+"system-context"
+```
+
+### `sessionOverlay.clearOnSessionEnd`
+
+* `true`: remove session-local overlay state after the session ends
+* `false`: keep overlay artifacts after session end
+
 ### `hooks.allowPromptInjection`
 
-This is an OpenClaw plugin setting, not this plugin's own setting.
+This is an OpenClaw plugin setting, not this plugin's own internal logic setting.
 
 * `true`: overlays can be injected into prompts through `before_prompt_build`
 * `false`: OpenClaw blocks prompt injection; the plugin still collects feedback and runs end-of-session review
@@ -283,6 +350,14 @@ This is an OpenClaw plugin setting, not this plugin's own setting.
 ### `review.minEvidenceCount`
 
 Minimum number of feedback signals before the plugin recommends a skill update.
+
+### `review.allowAutoMergeOnLowRiskOnly`
+
+Controls whether automatic merging should only happen for low-risk changes.
+
+Recommended default:
+
+* `false` unless the user explicitly wants tighter auto-merge restrictions
 
 ---
 
@@ -309,14 +384,21 @@ The review step uses an LLM to analyze session evidence and propose skill modifi
 Provider configuration is resolved in this order:
 
 1. **Environment variables** (highest priority):
-   - `OPENCLAW_ANYROUTER_BASE_URL` + `OPENCLAW_ANYROUTER_API_KEY`
-   - `OPENROUTER_API_KEY` (optional `OPENROUTER_BASE_URL`, defaults to `https://openrouter.ai/api/v1`)
-   - `OPENAI_API_KEY` (optional `OPENAI_BASE_URL`, defaults to `https://api.openai.com`)
-   - `ANTHROPIC_API_KEY`
+
+   * `OPENCLAW_ANYROUTER_BASE_URL` + `OPENCLAW_ANYROUTER_API_KEY`
+   * `OPENROUTER_API_KEY` (optional `OPENROUTER_BASE_URL`, defaults to `https://openrouter.ai/api/v1`)
+   * `OPENAI_API_KEY` (optional `OPENAI_BASE_URL`, defaults to `https://api.openai.com`)
+   * `ANTHROPIC_API_KEY`
 2. **`openclaw.json` file** (searched in workspace parent dir, then workspace dir itself)
 3. If no provider is found, the LLM call fails and the review falls back to overlay-based diffs
 
-The `api` field in `openclaw.json` providers supports: `openai`, `openai-completions`, `openai-chat-completions` (all OpenAI-compatible), and `anthropic-messages`, `anthropic`.
+The `api` field in `openclaw.json` providers supports:
+
+* `openai`
+* `openai-completions`
+* `openai-chat-completions`
+* `anthropic-messages`
+* `anthropic`
 
 When a patch file contains `# LLM Unavailable - Using Fallback`, it means the LLM was unreachable — the patch still contains useful overlay-based content for human review.
 
@@ -324,12 +406,21 @@ When a patch file contains `# LLM Unavailable - Using Fallback`, it means the LL
 
 The `llm.provider` field controls how the model string is routed to the API:
 
-* **`provider: null`** (default) — the resolver auto-detects the provider by splitting the model string on the first `/`. For example, `openrouter/anthropic/claude-3.5-sonnet` splits into provider=`openrouter` and modelId=`anthropic/claude-3.5-sonnet`.
-* **`provider: "openrouter"`** (explicit) — the resolver uses `openrouter` for routing and passes the model string **verbatim** to the API. This is needed when the model ID itself contains the provider name (e.g. `openrouter/hunter-alpha` where `openrouter/hunter-alpha` is the full model ID on OpenRouter).
+* **`provider: null`** (default) — the resolver auto-detects the provider by splitting the model string on the first `/`.
+  Example:
+  `openrouter/anthropic/claude-3.5-sonnet`
+  → provider = `openrouter`
+  → modelId = `anthropic/claude-3.5-sonnet`
+
+* **`provider: "openrouter"`** (explicit) — the resolver uses `openrouter` for routing and passes the model string **verbatim** to the API.
+  This is needed when the model ID itself contains the provider name.
+  Example:
+  `openrouter/hunter-alpha`
 
 Set `provider` explicitly when:
-1. Your model ID starts with the same name as your provider (e.g. `openrouter/hunter-alpha` on OpenRouter)
-2. You want to ensure the model string is never modified before being sent to the API
+
+1. your model ID starts with the same name as your provider
+2. you want to ensure the model string is never modified before being sent to the API
 
 ---
 
@@ -380,7 +471,19 @@ plugins.entries.skill-evolution.hooks.allowPromptInjection
 
 When that value is `false`, OpenClaw blocks `before_prompt_build` prompt mutation.
 
-## Config belongs under `plugins.entries.skill-evolution.config`
+## Config belongs under `plugins.entries.skill-evolution`
+
+The plugin entry belongs under:
+
+```jsonc
+plugins.entries.skill-evolution
+```
+
+The plugin's runtime settings belong under:
+
+```jsonc
+plugins.entries.skill-evolution.config
+```
 
 Do not put the production config only at a random top-level key and expect OpenClaw to wire it automatically.
 
@@ -432,7 +535,8 @@ Check:
 
 If the API returns "model not found" errors:
 
-* Check whether your model ID is being split incorrectly. For example, `openrouter/hunter-alpha` with `provider: null` sends just `hunter-alpha` to the API.
-* Set `llm.provider` explicitly to prevent prefix stripping: `"provider": "openrouter"` sends `openrouter/hunter-alpha` verbatim.
+* Check whether your model ID is being split incorrectly.
+  Example: `openrouter/hunter-alpha` with `provider: null` sends just `hunter-alpha` to the API.
+* Set `llm.provider` explicitly to prevent prefix stripping:
+  `"provider": "openrouter"` sends `openrouter/hunter-alpha` verbatim.
 * For standard multi-segment models like `openrouter/anthropic/claude-3.5-sonnet`, leave `provider: null` — the resolver correctly extracts `anthropic/claude-3.5-sonnet` as the model ID.
-
