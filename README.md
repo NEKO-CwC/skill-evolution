@@ -129,6 +129,61 @@ rm -rf .skill-patches
 * 生成 patch，并支持 manual / auto merge
 * 保留最多 5 个 skill 历史版本用于回滚
 
+## Review Mode（v2）
+
+`reviewMode` 控制 session 结束后 patch 的处理方式：
+
+| Mode | 行为 |
+|------|------|
+| `off` | 不执行 review pipeline |
+| `queue-only` | 生成 patch 并入队，不启动 agent（**默认值**，与 v1 行为一致）|
+| `assisted` | 入队 + 启动 review agent + 可选通知 |
+| `auto-low-risk` | 同 assisted，但低风险 patch 自动 apply |
+
+### Patch 生命周期
+
+Patch 使用 8 状态的有限状态机管理：
+
+```
+queued → reviewing → ready → notified → approved → applied
+                                      → rejected
+queued/reviewing/ready → superseded
+任何状态 → failed
+```
+
+### Agent Tools
+
+插件注册 7 个 agent tool，供 review/notify agent 程序化操作 patch：
+
+| Tool | 说明 |
+|------|------|
+| `skill_evolution_patch_list` | 列出 patch（可按 skillKey/status/limit 过滤）|
+| `skill_evolution_patch_get` | 获取 patch 完整详情 |
+| `skill_evolution_patch_apply` | 应用 patch 到 SKILL.md |
+| `skill_evolution_patch_reject` | 拒绝 patch |
+| `skill_evolution_patch_status` | 查询 patch 状态 |
+| `skill_evolution_review_enqueue` | 将 patch 提交 review |
+| `skill_evolution_patch_notify` | 发送 patch 通知 |
+
+所有 tool 返回结构化 JSON，均为幂等操作。
+
+### Review Agent
+
+review agent 定义在 `agents/skill-evolution-review.json`。在 `assisted` 或 `auto-low-risk` 模式下，session 结束后自动触发。agent 通过上述 tool 读取 patch、分析风险、执行 apply/reject。
+
+如果 agent 不可用（spawn 失败或超时），自动回退到 `LLMReviewRunner`。
+
+### Notify Agent
+
+notify agent 定义在 `agents/skill-evolution-notify.json`。启用通知后，在 patch ready 时发送提醒。
+
+通知系统支持：
+- **Per-session 模式**：每个 session 结束后立即通知
+- **Digest 模式**：按 cron 定时聚合发送
+- **Debounce**：同一 skill 在时间窗口内不重复通知
+- **风险过滤**：低于 `minRiskToInterrupt` 的 patch 不触发通知
+- **Flood 保护**：同一 skill 超过 3 个 pending patch 时自动 supersede 旧的
+
 ## LLM Review 配置
 
 插件默认使用 OpenClaw 主配置中的 LLM provider 执行 review。Provider 解析优先级：

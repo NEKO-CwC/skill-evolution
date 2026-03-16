@@ -1,22 +1,85 @@
+# ──────────────────────────────────────────────
+# Skill Evolution Plugin — Basic Config
+# 大多数用户只需要设置以下字段
+# ──────────────────────────────────────────────
+
 skillEvolution:
   enabled: true
+
+  # Review 模式 — 控制 session 结束后 patch 的处理方式
+  # off:           不执行 review pipeline
+  # queue-only:    生成 patch 并入队，不启动 agent（默认）
+  # assisted:      入队 + 启动 review agent + 可选通知
+  # auto-low-risk: 同 assisted，但低风险 patch 自动 apply
+  reviewMode: "queue-only"
+
   merge:
     requireHumanMerge: true
     maxRollbackVersions: 5
+
   sessionOverlay:
     enabled: true
     storageDir: ".skill-overlays"
     injectMode: "system-context"
     clearOnSessionEnd: true
+
   triggers:
     onToolError: true
     onUserCorrection: true
     onSessionEndReview: true
     onPositiveFeedback: true
+
   llm:
     inheritPrimaryConfig: true
     modelOverride: null
     thinkingOverride: null
+
   review:
     minEvidenceCount: 2
     allowAutoMergeOnLowRiskOnly: false
+
+  # 通知（可选）
+  notify:
+    enabled: false
+    mode: "off"           # off / per-session / digest
+    channel: "same-thread"
+
+# ──────────────────────────────────────────────
+# Advanced Config — 以下字段通常不需要修改
+# ──────────────────────────────────────────────
+
+  # Review / Notify Agent 配置
+  agents:
+    review:
+      enabled: true
+      agentId: "skill-evolution-review"
+      spawnMode: "session"        # run (一次性) / session (持久)
+      thread: true
+      model: null                 # null = 继承 OpenClaw 主配置
+      thinking: null
+      runTimeoutSeconds: 180
+    notify:
+      enabled: false
+      agentId: "skill-evolution-notify"
+      spawnMode: "run"
+      thread: false
+      model: null
+      thinking: null
+
+  # Patch Queue 存储配置
+  queue:
+    storageDir: ".skill-patches"
+    metadataFile: ".skill-patches/index.json"
+    dedupeWindowMinutes: 60
+    maxPendingPerSkill: 20
+
+  # 通知策略
+  notifications:
+    debounceSeconds: 300
+    digestCron: ""                # 空 = 不聚合; 例如 "0 9 * * *" = 每天 9 点
+    minRiskToInterrupt: "medium"  # low / medium / high
+
+  # 风险策略
+  risk:
+    autoApplyMaxRisk: "low"       # auto-low-risk 模式下自动 apply 的最高风险
+    notifyMinRisk: "low"          # 触发通知的最低风险

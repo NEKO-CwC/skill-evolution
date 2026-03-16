@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-OpenClaw Skill Evolution Plugin — a TypeScript plugin that enables SKILL.md files to evolve based on real usage feedback. Skills improve through session-local overlays, deterministic review, and safe merge/rollback mechanisms.
+OpenClaw Skill Evolution Plugin — a TypeScript plugin that enables SKILL.md files to evolve based on real usage feedback. Skills improve through session-local overlays, deterministic review, and safe merge/rollback mechanisms. v2 adds a structured patch queue with state machine, agent tools for programmatic patch operations, and optional review/notify agent integration.
 
 ## Commands
 
@@ -26,26 +26,39 @@ npx vitest run tests/plugin/test_config.ts
 1. **Collect** — `after_tool_call` / `message_received` hooks capture errors, corrections, positive signals
 2. **Overlay** — `FeedbackCollector` + `FeedbackClassifier` create session-local `.json` overlays
 3. **Inject** — `before_prompt_build` prepends overlays into prompts (session-scoped only)
-4. **Review** — `session_end` triggers deterministic rule-based review → patch generation
+4. **Review** — `session_end` triggers review pipeline → patch generation → enqueue
 5. **Merge/Rollback** — `MergeManager` applies patch (auto or manual per policy), `RollbackManager` maintains history (capped at 5 versions)
+
+**v2 Additions:**
+- **Patch Queue** — `PatchQueueManager` manages structured `PatchCandidate` objects with 8-state lifecycle, file-level locking, and `index.json` for fast queries
+- **Agent Tools** — 7 tools registered via `api.registerTool()` for programmatic patch list/get/apply/reject/status/enqueue/notify
+- **Review Orchestrator** — Coordinates enqueue → review agent (or LLM fallback) → notify flow
+- **Notify Manager** — Debounced, digest-capable notifications with risk filtering and flood protection
 
 **Module Hierarchy:**
 ```
-src/openclaw.ts            ← OpenClaw entry point, registers 4 hooks via api.on()
+src/openclaw.ts            ← OpenClaw entry point, registers hooks + agent tools
 src/plugin/index.ts        ← Composition root (SkillEvolutionPlugin)
 src/plugin/hooks/          ← 5 lifecycle hook handlers
 src/plugin/overlay/        ← File-system backed overlay store + prompt injector
 src/plugin/feedback/       ← In-memory collector + regex classifiers (EN + CN patterns)
-src/plugin/config.ts       ← YAML loading, defaults, validation
+src/plugin/tools/          ← 7 agent tool implementations + registration
+src/plugin/notify/         ← NotifyManager (debounce, digest, dedupe, flood control)
+src/plugin/config.ts       ← YAML loading, defaults, validation (basic + advanced tiers)
 src/review/                ← review_runner, patch_generator, merge_manager, rollback_manager
+src/review/patch_queue.ts  ← PatchQueueManager (state machine, index, locking)
+src/review/review_orchestrator.ts ← Agent spawn + LLM fallback coordination
 src/shared/types.ts        ← All interfaces centralized here
-src/shared/errors.ts       ← Custom errors: OverlayError, MergeConflictError, RollbackError, etc.
+src/shared/errors.ts       ← Custom errors: PatchStateError, PatchNotFoundError, MergeConflictError, etc.
+agents/                    ← Agent definitions (skill-evolution-review, skill-evolution-notify)
 ```
 
 **Runtime Storage (workspace-relative dotfiles):**
 - `.skill-overlays/<session-id>/<skill-key>.json` — ephemeral session overlays
 - `.skill-backups/<skill-key>/<version-id>.json` — rollback history (max 5)
-- `.skill-patches/<skill-key>/<patch-id>.md` — pending manual merge patches
+- `.skill-patches/<skill-key>/<patch-id>.json` — structured patch metadata (v2)
+- `.skill-patches/<skill-key>/<patch-id>.md` — human-readable patch summary
+- `.skill-patches/index.json` — queue index for fast queries
 - `.skill-feedback/<session-id>.jsonl` — feedback audit trail
 
 ## Code Conventions
@@ -64,7 +77,16 @@ src/shared/errors.ts       ← Custom errors: OverlayError, MergeConflictError, 
 3. `requireHumanMerge=true` must block auto-merge
 4. Rollback chain capped at 5 versions (oldest dropped on overflow)
 5. Plugin must be told workspace directory at runtime via hook context — no direct workspace access without binding
+6. Patch state machine is strict — invalid transitions throw `PatchStateError`
+7. `reviewMode` defaults to `queue-only` — upgrading plugin changes zero behavior unless user opts in
+
+## Config Modes
+
+- `reviewMode: 'off'` — no review pipeline at session_end
+- `reviewMode: 'queue-only'` — enqueue patch, no agent spawn (default, matches v1)
+- `reviewMode: 'assisted'` — enqueue + review agent + optional notify
+- `reviewMode: 'auto-low-risk'` — like assisted but auto-apply low-risk patches
 
 ## Testing
 
-22 test files, 88+ tests. Tests use `mkdtemp` for isolated temp directories. Test categories: shared utilities, plugin config, feedback, overlay, review pipeline, regression (Chinese corrections, session consistency), and end-to-end workflows.
+34 test files, 318+ tests. Tests use `mkdtemp` for isolated temp directories. Test categories: shared utilities, plugin config (v1 + v2), feedback, overlay, review pipeline, patch queue + state machine, agent tools, notify manager, regression (Chinese corrections, session consistency, queue-only compat, multi-session), and end-to-end workflows.
