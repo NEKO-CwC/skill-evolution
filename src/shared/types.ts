@@ -31,6 +31,50 @@ export interface SkillEvolutionConfig {
     minEvidenceCount: number;
     allowAutoMergeOnLowRiskOnly: boolean;
   };
+
+  // === v2 basic fields ===
+  reviewMode?: 'off' | 'queue-only' | 'assisted' | 'auto-low-risk';
+  notify?: {
+    enabled: boolean;
+    mode: 'off' | 'per-session' | 'digest';
+    channel: string;
+  };
+
+  // === v2 advanced fields ===
+  agents?: {
+    review: {
+      enabled: boolean;
+      agentId: string;
+      spawnMode: 'run' | 'session';
+      thread: boolean;
+      model: string | null;
+      thinking: string | null;
+      runTimeoutSeconds: number;
+    };
+    notify: {
+      enabled: boolean;
+      agentId: string;
+      spawnMode: 'run' | 'session';
+      thread: boolean;
+      model: string | null;
+      thinking: string | null;
+    };
+  };
+  queue?: {
+    storageDir: string;
+    metadataFile: string;
+    dedupeWindowMinutes: number;
+    maxPendingPerSkill: number;
+  };
+  notifications?: {
+    debounceSeconds: number;
+    digestCron: string;
+    minRiskToInterrupt: RiskLevel;
+  };
+  risk?: {
+    autoApplyMaxRisk: RiskLevel;
+    notifyMinRisk: RiskLevel;
+  };
 }
 
 export interface FeedbackEvent {
