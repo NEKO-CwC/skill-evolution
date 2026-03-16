@@ -17,6 +17,8 @@ import { ConsoleLogger } from './shared/logger.js';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { existsSync, readFileSync } from 'node:fs';
+import { PatchQueueManager } from './review/patch_queue.js';
+import { registerPatchTools } from './plugin/tools/index.js';
 
 const HOOK_PRIORITY = 50;
 
@@ -210,4 +212,11 @@ export default function register(api: OpenClawPluginApi): void {
   );
 
   logger.info('Note: if allowPromptInjection is disabled in OpenClaw config (plugins.entries.skill-evolution.hooks.allowPromptInjection=false), overlay injection via before_prompt_build will be silently ignored by OpenClaw. The plugin will still collect feedback and run reviews, but session overlays will not appear in prompts.');
+
+  // Register agent tools if OpenClaw runtime supports it
+  if (typeof api.registerTool === 'function') {
+    const patchQueue = new PatchQueueManager(plugin.paths.patchesDir);
+    registerPatchTools(api, { patchQueue, mergeManager: plugin.mergeManager });
+    logger.info('Patch agent tools registered');
+  }
 }
