@@ -121,10 +121,21 @@ export class ReviewOrchestrator {
     }
   }
 
-  private async trySpawnReviewAgent(_patchId: string): Promise<boolean> {
-    // Agent spawning requires OpenClaw session API which is not available in plugin context.
-    // This is a placeholder that will be implemented when the runtime supports it.
-    // For now, always returns false to trigger LLM fallback.
+  private async trySpawnReviewAgent(patchId: string): Promise<boolean> {
+    // Agent spawning requires OpenClaw session API (api.spawnAgent / api.runAgent).
+    // When the runtime supports it, this method will:
+    // 1. Check if a review agent session already exists (reuse if spawnMode='session')
+    // 2. Spawn the skill-evolution-review agent with the patchId as task
+    // 3. The agent will call skill_evolution_patch_get -> analyze -> patch_apply/reject
+    // 4. Return true on successful spawn, false on failure
+    //
+    // Model configuration: Review agent inherits OpenClaw native provider/model
+    // by default. Only overrides if agents.review.model is explicitly set.
+    //
+    // Timeout: agents.review.runTimeoutSeconds (default 180s)
+    //
+    // For now, returns false to trigger LLM fallback.
+    this.logger.debug('Agent spawn not yet available', { patchId });
     return false;
   }
 
