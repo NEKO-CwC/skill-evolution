@@ -7,7 +7,26 @@ import RollbackManagerImpl from '../../src/review/rollback_manager.ts';
 import { getDefaultConfig } from '../../src/plugin/config.ts';
 import { ensureDir, fileExists, readFile, writeFile } from '../../src/shared/fs.ts';
 import { MergeConflictError } from '../../src/shared/errors.ts';
-import type { PatchMetadata, RollbackManager, SkillVersion } from '../../src/shared/types.ts';
+import type { PatchCandidate, PatchMetadata, RollbackManager, SkillVersion } from '../../src/shared/types.ts';
+
+function makeCandidate(overrides?: Partial<PatchCandidate>): PatchCandidate {
+  const now = new Date().toISOString();
+  return {
+    id: 'patch_v2_1',
+    skillKey: 'skill.alpha',
+    status: 'approved',
+    risk: 'low',
+    sourceSessionIds: ['session-1'],
+    createdAt: now,
+    updatedAt: now,
+    summary: 'Test apply',
+    justification: 'Test justification',
+    proposedDiff: 'new content via v2',
+    originalContent: 'old content',
+    artifactVersion: 1,
+    ...overrides,
+  };
+}
 
 describe('review/merge_manager', () => {
   let tempDir: string;
@@ -98,5 +117,125 @@ describe('review/merge_manager', () => {
     const manager = new MergeManagerImpl(config, failingRollback, skillsDir, patchesDir);
 
     await expect(manager.merge('skill.alpha', 'x', metadata)).rejects.toBeInstanceOf(MergeConflictError);
+  });
+
+  describe('applyPatch (v2)', () => {
+    it('writes SKILL.md and creates backup', async () => {
+      const config = getDefaultConfig();
+      const rollback = new RollbackManagerImpl(config, backupsDir, skillsDir);
+      const manager = new MergeManagerImpl(config, rollback, skillsDir, patchesDir);
+
+      const skillPath = join(skillsDir, 'skill.alpha', 'SKILL.md');
+      await ensureDir(dirname(skillPath));
+      await writeFile(skillPath, 'old content');
+
+      const candidate = makeCandidate();
+      const result = await manager.applyPatch(candidate);
+
+      expect(result.status).toBe('applied');
+      await expect(readFile(skillPath)).resolves.toBe('new content via v2');
+
+      const backupFiles = await readdir(join(backupsDir, 'skill.alpha'));
+      expect(backupFiles.some((name) => name.endsWith('.json'))).toBe(true);
+    });
+
+    it('is idempotent for already applied patches', async () => {
+      const config = getDefaultConfig();
+      const rollback = new RollbackManagerImpl(config, backupsDir, skillsDir);
+      const manager = new MergeManagerImpl(config, rollback, skillsDir, patchesDir);
+
+      const candidate = makeCandidate({ status: 'applied' });
+      const result = await manager.applyPatch(candidate);
+      expect(result.status).toBe('applied');
+    });
+
+    it('uses revisedDiff from reviewOutput when available', async () => {
+      const config = getDefaultConfig();
+      const rollback = new RollbackManagerImpl(config, backupsDir, skillsDir);
+      const manager = new MergeManagerImpl(config, rollback, skillsDir, patchesDir);
+
+      const skillPath = join(skillsDir, 'skill.alpha', 'SKILL.md');
+      await ensureDir(dirname(skillPath));
+      await writeFile(skillPath, 'old');
+
+      const candidate = makeCandidate({
+        proposedDiff: 'original diff',
+        reviewOutput: {
+          reviewedAt: new Date().toISOString(),
+          riskAssessment: 'low',
+          suggestedAction: 'apply',
+          rationale: 'looks good',
+          revisedDiff: 'revised diff content',
+        },
+      });
+
+      await manager.applyPatch(candidate);
+      await expect(readFile(skillPath)).resolves.toBe('revised diff content');
+    });
+
+    it('wraps failures into MergeConflictError', async () => {
+      const config = getDefaultConfig();
+      const failingRollback: RollbackManager = {
+        backup: async (): Promise<SkillVersion> => {
+          throw new Error('forced');
+        },
+        restore: async (): Promise<void> => undefined,
+        listVersions: async (): Promise<SkillVersion[]> => [],
+        pruneOldVersions: async (): Promise<void> => undefined
+      };
+      const manager = new MergeManagerImpl(config, failingRollback, skillsDir, patchesDir);
+
+      await expect(manager.applyPatch(makeCandidate())).rejects.toBeInstanceOf(MergeConflictError);
+    });
+  });
+
+  describe('rejectPatch (v2)', () => {
+    it('returns candidate with rejected status', async () => {
+      const config = getDefaultConfig();
+      const manager = new MergeManagerImpl(config);
+
+      const candidate = makeCandidate({ status: 'ready' });
+      const result = await manager.rejectPatch(candidate, 'Not applicable');
+
+      expect(result.status).toBe('rejected');
+      expect(result.justification).toContain('Not applicable');
+    });
+
+    it('is idempotent for already rejected patches', async () => {
+      const config = getDefaultConfig();
+      const manager = new MergeManagerImpl(config);
+
+      const candidate = makeCandidate({ status: 'rejected' });
+      const result = await manager.rejectPatch(candidate);
+      expect(result.status).toBe('rejected');
+    });
+  });
+
+  describe('checkRiskPolicy', () => {
+    it('allows low risk when maxAutoApply is low', () => {
+      const config = getDefaultConfig();
+      const manager = new MergeManagerImpl(config);
+      expect(manager.checkRiskPolicy('low', 'low')).toBe(true);
+    });
+
+    it('blocks medium risk when maxAutoApply is low', () => {
+      const config = getDefaultConfig();
+      const manager = new MergeManagerImpl(config);
+      expect(manager.checkRiskPolicy('medium', 'low')).toBe(false);
+    });
+
+    it('allows medium risk when maxAutoApply is medium', () => {
+      const config = getDefaultConfig();
+      const manager = new MergeManagerImpl(config);
+      expect(manager.checkRiskPolicy('medium', 'medium')).toBe(true);
+    });
+
+    it('allows all risks when maxAutoApply is high', () => {
+      const config = getDefaultConfig();
+      const manager = new MergeManagerImpl(config);
+      expect(manager.checkRiskPolicy('low', 'high')).toBe(true);
+      expect(manager.checkRiskPolicy('medium', 'high')).toBe(true);
+      expect(manager.checkRiskPolicy('high', 'high')).toBe(true);
+    });
   });
 });

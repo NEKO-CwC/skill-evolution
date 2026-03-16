@@ -54,6 +54,65 @@ export interface PatchMetadata {
   rollbackChainDepth: number;
 }
 
+// ── Patch State Machine (v2) ─────────────────────────────────────
+
+export type PatchStatus =
+  | 'queued'
+  | 'reviewing'
+  | 'ready'
+  | 'notified'
+  | 'approved'
+  | 'rejected'
+  | 'applied'
+  | 'superseded'
+  | 'failed';
+
+export type RiskLevel = 'low' | 'medium' | 'high';
+
+export interface PatchCandidate {
+  id: string;
+  skillKey: string;
+  status: PatchStatus;
+  risk: RiskLevel;
+  sourceSessionIds: string[];
+  createdAt: string;
+  updatedAt: string;
+  summary: string;
+  justification: string;
+  proposedDiff: string;
+  originalContent: string;
+  supersedes?: string[];
+  supersededBy?: string;
+  proposalPath?: string;
+  artifactVersion?: number;
+  reviewOutput?: ReviewProposal;
+}
+
+export interface ReviewProposal {
+  reviewedAt: string;
+  reviewerAgentId?: string;
+  riskAssessment: RiskLevel;
+  suggestedAction: 'apply' | 'reject' | 'revise';
+  rationale: string;
+  revisedDiff?: string;
+}
+
+export interface PatchQueueIndex {
+  version: 1;
+  updatedAt: string;
+  patches: PatchIndexEntry[];
+}
+
+export interface PatchIndexEntry {
+  id: string;
+  skillKey: string;
+  status: PatchStatus;
+  risk: RiskLevel;
+  createdAt: string;
+  updatedAt: string;
+  summary: string;
+}
+
 export interface OverlayEntry {
   sessionId: string;
   skillKey: string;
@@ -161,9 +220,29 @@ export interface PatchGenerator {
   generate(result: ReviewResult, originalContent: string): string;
 }
 
+export interface PatchCandidateGenerator {
+  generateCandidate(
+    result: ReviewResult,
+    originalContent: string,
+    sessionIds: string[]
+  ): PatchCandidate;
+}
+
+export interface PatchQueue {
+  create(candidate: PatchCandidate): Promise<PatchCandidate>;
+  get(patchId: string): Promise<PatchCandidate>;
+  update(patchId: string, updates: Partial<PatchCandidate>): Promise<PatchCandidate>;
+  transition(patchId: string, newStatus: PatchStatus): Promise<PatchCandidate>;
+  list(filter?: { skillKey?: string; status?: PatchStatus; limit?: number }): Promise<PatchIndexEntry[]>;
+  supersede(oldPatchId: string, newPatchId: string): Promise<void>;
+  getIndex(): Promise<PatchQueueIndex>;
+}
+
 export interface MergeManager {
   merge(skillKey: string, patchContent: string, metadata: PatchMetadata): Promise<boolean>;
   checkMergePolicy(metadata: PatchMetadata): boolean;
+  applyPatch(candidate: PatchCandidate): Promise<PatchCandidate>;
+  rejectPatch(candidate: PatchCandidate, reason?: string): Promise<PatchCandidate>;
 }
 
 export interface RollbackManager {
@@ -213,6 +292,13 @@ export interface ResolvedPaths {
 
 // ── OpenClaw Plugin API Types ──────────────────────────────────────
 
+export interface AgentToolDefinition {
+  name: string;
+  description: string;
+  inputSchema: Record<string, unknown>;
+  handler: (params: Record<string, unknown>) => Promise<unknown>;
+}
+
 /** The API object passed to the plugin's register function by OpenClaw. */
 export interface OpenClawPluginApi {
   id: string;
@@ -220,6 +306,7 @@ export interface OpenClawPluginApi {
   pluginConfig?: Record<string, unknown>;
   logger: unknown;
   on<K extends PluginHookName>(hookName: K, handler: PluginHookHandlerMap[K], opts?: HookOptions): void;
+  registerTool?(tool: AgentToolDefinition): void;
 }
 
 export type PluginHookName =

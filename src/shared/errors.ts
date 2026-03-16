@@ -51,3 +51,23 @@ export class InvalidConfigError extends Error {
     this.name = 'InvalidConfigError';
   }
 }
+
+/**
+ * Raised when an invalid patch state transition is attempted.
+ */
+export class PatchStateError extends Error {
+  public constructor(message: string) {
+    super(message);
+    this.name = 'PatchStateError';
+  }
+}
+
+/**
+ * Raised when a patch ID cannot be found in the queue.
+ */
+export class PatchNotFoundError extends Error {
+  public constructor(message: string) {
+    super(message);
+    this.name = 'PatchNotFoundError';
+  }
+}
