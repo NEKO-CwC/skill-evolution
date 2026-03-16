@@ -8,6 +8,7 @@ import type {
   MergeManager,
   OverlayInjector,
   OverlayStore,
+  PatchCandidateGenerator,
   PatchGenerator,
   PluginHooks,
   RefreshableReviewRunner,
@@ -33,6 +34,8 @@ import PatchGeneratorImpl from '../review/patch_generator.js';
 import LLMReviewRunner from '../review/llm_review_runner.js';
 import { LlmRuntimeResolver } from '../review/llm_runtime_resolver.js';
 import RollbackManagerImpl from '../review/rollback_manager.js';
+import { PatchQueueManager } from '../review/patch_queue.js';
+import { ReviewOrchestrator } from '../review/review_orchestrator.js';
 import { ConsoleLogger } from '../shared/logger.js';
 
 /**
@@ -60,13 +63,17 @@ export class SkillEvolutionPlugin implements PluginHooks {
 
   public readonly feedbackClassifier: FeedbackClassifier;
 
-  public readonly patchGenerator: PatchGenerator;
+  public readonly patchGenerator: PatchGeneratorImpl;
 
   public mergeManager: MergeManager;
 
   public rollbackManager: RollbackManager;
 
   public reviewRunner: ReviewRunner;
+
+  public patchQueue: PatchQueueManager | null = null;
+
+  public reviewOrchestrator: ReviewOrchestrator | null = null;
 
   private readonly sessionSkillKeys: Map<string, string>;
 
@@ -108,6 +115,12 @@ export class SkillEvolutionPlugin implements PluginHooks {
       this.rollbackManager,
       this.paths.skillsDir,
       this.paths.patchesDir
+    );
+    this.patchQueue = new PatchQueueManager(this.paths.patchesDir);
+    this.reviewOrchestrator = new ReviewOrchestrator(
+      this.config,
+      this.patchQueue,
+      this.reviewRunner
     );
     this.sessionSkillKeys = new Map<string, string>();
     this.sessionStartedAt = new Map<string, number>();
@@ -187,6 +200,12 @@ export class SkillEvolutionPlugin implements PluginHooks {
       this.rollbackManager,
       this.paths.skillsDir,
       this.paths.patchesDir
+    );
+    this.patchQueue = new PatchQueueManager(this.paths.patchesDir);
+    this.reviewOrchestrator = new ReviewOrchestrator(
+      this.config,
+      this.patchQueue,
+      this.reviewRunner
     );
   }
 

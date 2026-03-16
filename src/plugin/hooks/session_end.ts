@@ -50,8 +50,12 @@ export async function session_end(plugin: SkillEvolutionPlugin, sessionId: strin
     reviewRunnerPaths: plugin.reviewRunner.paths
   });
 
-  if (plugin.config.triggers.onSessionEndReview) {
-    await runReviewPipeline(plugin, summary);
+  const reviewMode = plugin.config.reviewMode ?? 'queue-only';
+
+  if (reviewMode === 'off') {
+    plugin.logger.info('Review mode is off, skipping review pipeline', { sessionId });
+  } else if (plugin.config.triggers.onSessionEndReview) {
+    await runReviewPipeline(plugin, summary, reviewMode);
   }
 
   if (plugin.config.sessionOverlay.clearOnSessionEnd) {
@@ -61,16 +65,21 @@ export async function session_end(plugin: SkillEvolutionPlugin, sessionId: strin
   plugin.endSession(sessionId);
 }
 
-async function runReviewPipeline(plugin: SkillEvolutionPlugin, summary: SessionSummary): Promise<void> {
+async function runReviewPipeline(
+  plugin: SkillEvolutionPlugin,
+  summary: SessionSummary,
+  reviewMode: string
+): Promise<void> {
   const { sessionId, skillKey } = summary;
   const minEvidence = plugin.config.review.minEvidenceCount;
   const totalEvidence = summary.events.length;
 
-  plugin.logger.debug('Starting review pipeline', { 
-    sessionId, 
-    skillKey, 
-    totalEvidence, 
+  plugin.logger.debug('Starting review pipeline', {
+    sessionId,
+    skillKey,
+    totalEvidence,
     minEvidenceRequired: minEvidence,
+    reviewMode,
     pluginPaths: plugin.paths,
     reviewRunnerPaths: plugin.reviewRunner.paths
   });
@@ -86,36 +95,18 @@ async function runReviewPipeline(plugin: SkillEvolutionPlugin, summary: SessionS
   }
 
   try {
-    const reviewResult = await plugin.reviewRunner.runReview(summary);
-
-    if (!reviewResult.isModificationRecommended) {
-      plugin.logger.info('Review complete: no modification recommended', {
-        sessionId,
-        skillKey,
-        justification: reviewResult.justification
-      });
+    // v2 path: use PatchQueueManager + ReviewOrchestrator for assisted/auto-low-risk modes
+    if (
+      plugin.patchQueue &&
+      plugin.reviewOrchestrator &&
+      (reviewMode === 'assisted' || reviewMode === 'auto-low-risk')
+    ) {
+      await runV2ReviewPipeline(plugin, summary, reviewMode);
       return;
     }
 
-    const currentContent = await readCurrentSkillContent(plugin.paths.skillsDir, skillKey);
-    const patchContent = plugin.patchGenerator.generate(reviewResult, currentContent);
-
-    plugin.logger.info('Patch generated, attempting merge', {
-      sessionId,
-      skillKey,
-      patchId: reviewResult.metadata.patchId,
-      riskLevel: reviewResult.riskLevel,
-      mergeMode: reviewResult.metadata.mergeMode,
-      patchPreview: patchContent.substring(0, 200)
-    });
-
-    const merged = await plugin.mergeManager.merge(skillKey, patchContent, reviewResult.metadata);
-
-    plugin.logger.info(merged ? 'Patch auto-merged successfully' : 'Patch queued for human review', {
-      sessionId,
-      skillKey,
-      patchId: reviewResult.metadata.patchId
-    });
+    // v1/queue-only path: inline review pipeline (preserves existing behavior)
+    await runLegacyReviewPipeline(plugin, summary);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
     plugin.logger.error('Review pipeline failed', {
@@ -124,6 +115,111 @@ async function runReviewPipeline(plugin: SkillEvolutionPlugin, summary: SessionS
       error: message
     });
   }
+}
+
+async function runV2ReviewPipeline(
+  plugin: SkillEvolutionPlugin,
+  summary: SessionSummary,
+  reviewMode: string
+): Promise<void> {
+  const { sessionId, skillKey } = summary;
+
+  // Generate review result for patch candidate creation
+  const reviewResult = await plugin.reviewRunner.runReview(summary);
+
+  if (!reviewResult.isModificationRecommended) {
+    plugin.logger.info('Review complete: no modification recommended', {
+      sessionId,
+      skillKey,
+      justification: reviewResult.justification
+    });
+    return;
+  }
+
+  const currentContent = await readCurrentSkillContent(plugin.paths.skillsDir, skillKey);
+
+  // Create PatchCandidate via v2 generator
+  const candidate = plugin.patchGenerator.generateCandidate(
+    reviewResult,
+    currentContent,
+    [sessionId]
+  );
+
+  // Check for existing pending patches and supersede
+  const pendingPatches = await plugin.patchQueue!.findPendingForSkill(skillKey);
+  const createdPatch = await plugin.patchQueue!.create(candidate);
+
+  for (const pending of pendingPatches) {
+    await plugin.patchQueue!.supersede(pending.id, createdPatch.id);
+  }
+
+  plugin.logger.info('Patch candidate created', {
+    sessionId,
+    skillKey,
+    patchId: createdPatch.id,
+    riskLevel: createdPatch.risk,
+    reviewMode,
+    supersededCount: pendingPatches.length,
+  });
+
+  // Delegate to review orchestrator based on reviewMode
+  if (reviewMode === 'assisted' || reviewMode === 'auto-low-risk') {
+    // Fire-and-forget: don't block session_end
+    plugin.reviewOrchestrator!.enqueue(createdPatch.id).catch((err: unknown) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      plugin.logger.error('Review orchestrator enqueue failed', {
+        patchId: createdPatch.id,
+        error: msg,
+      });
+    });
+  }
+
+  // Schedule notification if enabled
+  const notifyConfig = plugin.config.notify;
+  if (notifyConfig?.enabled && notifyConfig.mode !== 'off') {
+    plugin.reviewOrchestrator!.scheduleNotify(createdPatch.id).catch((err: unknown) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      plugin.logger.error('Notify schedule failed', { patchId: createdPatch.id, error: msg });
+    });
+  }
+}
+
+async function runLegacyReviewPipeline(
+  plugin: SkillEvolutionPlugin,
+  summary: SessionSummary
+): Promise<void> {
+  const { sessionId, skillKey } = summary;
+
+  const reviewResult = await plugin.reviewRunner.runReview(summary);
+
+  if (!reviewResult.isModificationRecommended) {
+    plugin.logger.info('Review complete: no modification recommended', {
+      sessionId,
+      skillKey,
+      justification: reviewResult.justification
+    });
+    return;
+  }
+
+  const currentContent = await readCurrentSkillContent(plugin.paths.skillsDir, skillKey);
+  const patchContent = plugin.patchGenerator.generate(reviewResult, currentContent);
+
+  plugin.logger.info('Patch generated, attempting merge', {
+    sessionId,
+    skillKey,
+    patchId: reviewResult.metadata.patchId,
+    riskLevel: reviewResult.riskLevel,
+    mergeMode: reviewResult.metadata.mergeMode,
+    patchPreview: patchContent.substring(0, 200)
+  });
+
+  const merged = await plugin.mergeManager.merge(skillKey, patchContent, reviewResult.metadata);
+
+  plugin.logger.info(merged ? 'Patch auto-merged successfully' : 'Patch queued for human review', {
+    sessionId,
+    skillKey,
+    patchId: reviewResult.metadata.patchId
+  });
 }
 
 export default session_end;
