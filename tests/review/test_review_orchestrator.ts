@@ -100,14 +100,11 @@ describe('review/review_orchestrator', () => {
       expect(updated.status).toBe('queued');
     });
 
-    it('runs LLM fallback review for reviewMode=assisted', async () => {
+    it('runs LLM fallback review for reviewMode=assisted when agent disabled', async () => {
       const config = {
         ...getDefaultConfig(),
         reviewMode: 'assisted' as const,
-        agents: {
-          ...getDefaultConfig().agents!,
-          review: { ...getDefaultConfig().agents!.review, enabled: false },
-        },
+        agent: { enabled: false, id: 'skill-evolution', model: null },
       };
       const orch = new ReviewOrchestrator(config, patchQueue, makeReviewRunner());
 
@@ -119,13 +116,14 @@ describe('review/review_orchestrator', () => {
       expect(updated.status).toBe('ready');
     });
 
-    it('falls back to LLM when agent spawn fails for assisted mode', async () => {
+    it('falls back to LLM when agent session disabled for assisted mode', async () => {
       const config = {
         ...getDefaultConfig(),
         reviewMode: 'assisted' as const,
-        agents: {
-          ...getDefaultConfig().agents!,
-          review: { ...getDefaultConfig().agents!.review, enabled: true },
+        agent: { enabled: true, id: 'skill-evolution', model: null },
+        sessions: {
+          ...getDefaultConfig().sessions!,
+          review: { ...getDefaultConfig().sessions!.review, enabled: false },
         },
       };
       const orch = new ReviewOrchestrator(config, patchQueue, makeReviewRunner());
@@ -134,7 +132,7 @@ describe('review/review_orchestrator', () => {
       await patchQueue.create(patch);
       await orch.enqueue('orch_fallback');
 
-      // Agent spawn always fails (placeholder), so falls back to LLM
+      // Agent session disabled, so falls back to LLM
       const updated = await patchQueue.get('orch_fallback');
       expect(updated.status).toBe('ready');
     });

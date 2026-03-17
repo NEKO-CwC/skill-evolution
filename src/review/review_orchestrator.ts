@@ -1,8 +1,10 @@
 /**
  * Review orchestrator: coordinates enqueue -> review -> notify flow.
- * Handles agent spawning with fallback to LLMReviewRunner.
+ * Delegates to the top-level skill-evolution agent's internal sessions,
+ * with fallback to LLMReviewRunner when the agent is unavailable.
  */
 
+import { execFile } from 'node:child_process';
 import ConsoleLogger from '../shared/logger.js';
 import type {
   PatchCandidate,
@@ -32,7 +34,7 @@ export class ReviewOrchestrator {
   }
 
   /**
-   * Enqueue a patch for review. Attempts agent spawn, falls back to LLMReviewRunner.
+   * Enqueue a patch for review. Attempts agent delegation, falls back to LLMReviewRunner.
    * Non-blocking: returns immediately after fire-and-forget.
    */
   public async enqueue(patchId: string): Promise<void> {
@@ -43,17 +45,18 @@ export class ReviewOrchestrator {
       return;
     }
 
-    const agentConfig = this.config.agents?.review;
+    const agentConfig = this.config.agent;
+    const sessionConfig = this.config.sessions?.review;
 
-    if (agentConfig?.enabled) {
-      const spawned = await this.trySpawnReviewAgent(patchId);
-      if (spawned) return;
+    if (agentConfig?.enabled && sessionConfig?.enabled) {
+      const delegated = await this.tryDelegateToAgentSession(patchId);
+      if (delegated) return;
 
-      this.logger.warn('Agent spawn failed, falling back to LLMReviewRunner', {
+      this.logger.warn('Agent session delegation failed, falling back to LLMReviewRunner', {
         module: 'review_orchestrator',
-        event: 'agent_spawn_failed',
+        event: 'agent_delegation_failed',
         patchId,
-        reason: 'runtime_unavailable',
+        agentId: agentConfig.id,
         fallback: 'llm_review_runner',
       });
     }
@@ -121,22 +124,64 @@ export class ReviewOrchestrator {
     }
   }
 
-  private async trySpawnReviewAgent(patchId: string): Promise<boolean> {
-    // Agent spawning requires OpenClaw session API (api.spawnAgent / api.runAgent).
-    // When the runtime supports it, this method will:
-    // 1. Check if a review agent session already exists (reuse if spawnMode='session')
-    // 2. Spawn the skill-evolution-review agent with the patchId as task
-    // 3. The agent will call skill_evolution_patch_get -> analyze -> patch_apply/reject
-    // 4. Return true on successful spawn, false on failure
-    //
-    // Model configuration: Review agent inherits OpenClaw native provider/model
-    // by default. Only overrides if agents.review.model is explicitly set.
-    //
-    // Timeout: agents.review.runTimeoutSeconds (default 180s)
-    //
-    // For now, returns false to trigger LLM fallback.
-    this.logger.debug('Agent spawn not yet available', { patchId });
-    return false;
+  /**
+   * Delegate review to the top-level skill-evolution agent via gateway CLI.
+   * Sends a message to the agent's review session. Fire-and-forget, non-blocking.
+   * Returns true if delegation was initiated, false if unavailable.
+   */
+  private async tryDelegateToAgentSession(patchId: string): Promise<boolean> {
+    const agentId = this.config.agent?.id ?? 'skill-evolution';
+    const sessionConfig = this.config.sessions?.review;
+    const timeoutSeconds = sessionConfig?.timeoutSeconds ?? 180;
+
+    // Build a session ID for reuse if configured
+    const sessionId = sessionConfig?.reuse
+      ? `se-review-${agentId}`
+      : `se-review-${patchId}`;
+
+    const message = [
+      `Review patch ${patchId}.`,
+      'Use skill_evolution_patch_get to read details,',
+      'then skill_evolution_patch_apply or skill_evolution_patch_reject.',
+    ].join(' ');
+
+    return new Promise<boolean>((resolve) => {
+      const child = execFile(
+        'openclaw',
+        ['agent', '--agent', agentId, '--session-id', sessionId, '--message', message],
+        { timeout: timeoutSeconds * 1000 },
+        (error) => {
+          if (error) {
+            this.logger.debug('Agent session delegation completed with error', {
+              patchId,
+              agentId,
+              error: error.message,
+            });
+          } else {
+            this.logger.info('Agent session delegation completed', {
+              patchId,
+              agentId,
+              sessionId,
+            });
+          }
+        }
+      );
+
+      // Fire-and-forget: resolve immediately, don't wait for agent to finish
+      if (child.pid) {
+        this.logger.info('Delegated review to agent session', {
+          patchId,
+          agentId,
+          sessionId,
+          pid: child.pid,
+        });
+        child.unref();
+        resolve(true);
+      } else {
+        this.logger.debug('Failed to spawn agent process', { patchId, agentId });
+        resolve(false);
+      }
+    });
   }
 
   private async runLlmFallbackReview(patchId: string): Promise<void> {
