@@ -9,7 +9,7 @@ skillEvolution:
   # Review 模式 — 控制 session 结束后 patch 的处理方式
   # off:           不执行 review pipeline
   # queue-only:    生成 patch 并入队，不启动 agent（默认）
-  # assisted:      入队 + 启动 review agent + 可选通知
+  # assisted:      入队 + 委派到 agent session + 可选通知
   # auto-low-risk: 同 assisted，但低风险 patch 自动 apply
   reviewMode: "queue-only"
 
@@ -48,23 +48,24 @@ skillEvolution:
 # Advanced Config — 以下字段通常不需要修改
 # ──────────────────────────────────────────────
 
-  # Review / Notify Agent 配置
-  agents:
+  # 顶层 Agent（在 WebUI 中显示的唯一 agent）
+  agent:
+    enabled: true
+    id: "skill-evolution"     # 对应 openclaw agents list 中的 id
+    model: null               # null = 继承 OpenClaw 主配置
+
+  # 内部 Session 配置（review 和 notify 是 agent 内部 session）
+  sessions:
     review:
       enabled: true
-      agentId: "skill-evolution-review"
-      spawnMode: "session"        # run (一次性) / session (持久)
+      reuse: true             # 复用 session（推荐）
       thread: true
-      model: null                 # null = 继承 OpenClaw 主配置
-      thinking: null
-      runTimeoutSeconds: 180
+      timeoutSeconds: 180
     notify:
-      enabled: false
-      agentId: "skill-evolution-notify"
-      spawnMode: "run"
-      thread: false
-      model: null
-      thinking: null
+      enabled: true
+      reuse: true
+      thread: true
+      timeoutSeconds: 60
 
   # Patch Queue 存储配置
   queue:
@@ -83,3 +84,12 @@ skillEvolution:
   risk:
     autoApplyMaxRisk: "low"       # auto-low-risk 模式下自动 apply 的最高风险
     notifyMinRisk: "low"          # 触发通知的最低风险
+
+# ──────────────────────────────────────────────
+# 迁移说明
+# ──────────────────────────────────────────────
+# 如果之前使用了 agents.review / agents.notify 配置：
+# - 这些字段仍然有效（自动迁移到 agent + sessions）
+# - 建议迁移到新的 agent + sessions 格式
+# - agents.review.agentId / agents.notify.agentId 已弃用
+# - 现在只有一个顶层 agent: skill-evolution

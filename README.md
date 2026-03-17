@@ -167,17 +167,28 @@ queued/reviewing/ready → superseded
 
 所有 tool 返回结构化 JSON，均为幂等操作。
 
-### Review Agent
+### Agent 架构
 
-review agent 定义在 `agents/skill-evolution-review.json`。在 `assisted` 或 `auto-low-risk` 模式下，session 结束后自动触发。agent 通过上述 tool 读取 patch、分析风险、执行 apply/reject。
+插件使用**单一顶层 agent** `skill-evolution`，在 WebUI 中可见可操作。Review 和 Notify 是该 agent 的**内部 session**，不是独立 agent。
 
-如果 agent 不可用（spawn 失败或超时），自动回退到 `LLMReviewRunner`。
+注册 agent：
+```bash
+# 方式一：使用脚本
+./scripts/register-agent.sh
 
-### Notify Agent
+# 方式二：手动注册
+openclaw agents add skill-evolution --workspace ~/.openclaw/workspace --non-interactive
+```
 
-notify agent 定义在 `agents/skill-evolution-notify.json`。启用通知后，在 patch ready 时发送提醒。
+验证：
+```bash
+openclaw agents list
+# 应看到 skill-evolution agent
+```
 
-通知系统支持：
+在 `assisted` 或 `auto-low-risk` 模式下，session 结束后自动委派 review 任务到 agent。如果 agent 不可用，自动回退到 `LLMReviewRunner`。
+
+### 通知系统
 - **Per-session 模式**：每个 session 结束后立即通知
 - **Digest 模式**：按 cron 定时聚合发送
 - **Debounce**：同一 skill 在时间窗口内不重复通知
