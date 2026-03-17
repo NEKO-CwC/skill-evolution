@@ -41,6 +41,7 @@ export interface SkillEvolutionConfig {
   };
 
   // === v2 advanced fields ===
+  /** @deprecated Use `agent` + `sessions` instead. Kept for backward compat migration. */
   agents?: {
     review: {
       enabled: boolean;
@@ -58,6 +59,25 @@ export interface SkillEvolutionConfig {
       thread: boolean;
       model: string | null;
       thinking: string | null;
+    };
+  };
+  agent?: {
+    enabled: boolean;
+    id: string;
+    model: string | null;
+  };
+  sessions?: {
+    review: {
+      enabled: boolean;
+      reuse: boolean;
+      thread: boolean;
+      timeoutSeconds: number;
+    };
+    notify: {
+      enabled: boolean;
+      reuse: boolean;
+      thread: boolean;
+      timeoutSeconds: number;
     };
   };
   queue?: {

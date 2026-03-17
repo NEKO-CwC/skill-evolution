@@ -66,6 +66,25 @@ export function getDefaultConfig(): SkillEvolutionConfig {
         thinking: null,
       },
     },
+    agent: {
+      enabled: true,
+      id: 'skill-evolution',
+      model: null,
+    },
+    sessions: {
+      review: {
+        enabled: true,
+        reuse: true,
+        thread: true,
+        timeoutSeconds: 180,
+      },
+      notify: {
+        enabled: true,
+        reuse: true,
+        thread: true,
+        timeoutSeconds: 60,
+      },
+    },
     queue: {
       storageDir: '.skill-patches',
       metadataFile: '.skill-patches/index.json',
@@ -110,6 +129,7 @@ export async function loadConfig(configPath: string): Promise<SkillEvolutionConf
     deriveReviewModeCompat(merged);
   }
 
+  migrateAgentsCompat(merged);
   validateConfig(merged);
   return merged;
 }
@@ -133,6 +153,7 @@ export function fromOpenClawPluginConfig(raw: Record<string, unknown>): SkillEvo
     deriveReviewModeCompat(merged);
   }
 
+  migrateAgentsCompat(merged);
   validateConfig(merged);
   return merged;
 }
@@ -227,6 +248,20 @@ export function validateConfig(config: SkillEvolutionConfig): void {
     validateAgentConfig(config.agents.notify, 'agents.notify');
   }
 
+  if (config.agent) {
+    if (typeof config.agent.enabled !== 'boolean') {
+      throw new InvalidConfigError('skillEvolution.agent.enabled must be a boolean.');
+    }
+    if (typeof config.agent.id !== 'string' || config.agent.id.length === 0) {
+      throw new InvalidConfigError('skillEvolution.agent.id must be a non-empty string.');
+    }
+  }
+
+  if (config.sessions) {
+    validateSessionConfig(config.sessions.review, 'sessions.review');
+    validateSessionConfig(config.sessions.notify, 'sessions.notify');
+  }
+
   if (config.queue) {
     if (typeof config.queue.storageDir !== 'string' || config.queue.storageDir.length === 0) {
       throw new InvalidConfigError('skillEvolution.queue.storageDir must be a non-empty string.');
@@ -292,6 +327,58 @@ function validateAgentConfig(
   }
 }
 
+function validateSessionConfig(
+  session: { enabled: boolean; reuse: boolean; thread: boolean; timeoutSeconds: number },
+  prefix: string
+): void {
+  if (typeof session.enabled !== 'boolean') {
+    throw new InvalidConfigError(`skillEvolution.${prefix}.enabled must be a boolean.`);
+  }
+  if (typeof session.reuse !== 'boolean') {
+    throw new InvalidConfigError(`skillEvolution.${prefix}.reuse must be a boolean.`);
+  }
+  if (typeof session.thread !== 'boolean') {
+    throw new InvalidConfigError(`skillEvolution.${prefix}.thread must be a boolean.`);
+  }
+  if (!Number.isInteger(session.timeoutSeconds) || session.timeoutSeconds < 1) {
+    throw new InvalidConfigError(`skillEvolution.${prefix}.timeoutSeconds must be an integer >= 1.`);
+  }
+}
+
+/**
+ * Migrates legacy `agents.review/notify` config to `agent` + `sessions`.
+ * Called after deepMerge when old-style `agents` field is detected.
+ */
+export function migrateAgentsCompat(config: SkillEvolutionConfig): void {
+  if (!config.agents) return;
+
+  // Only migrate if new fields are not explicitly set
+  if (!config.agent || config.agent.id === 'skill-evolution') {
+    config.agent = {
+      enabled: config.agents.review.enabled || config.agents.notify.enabled,
+      id: 'skill-evolution',
+      model: config.agents.review.model ?? config.agents.notify.model ?? null,
+    };
+  }
+
+  if (!config.sessions) {
+    config.sessions = {
+      review: {
+        enabled: config.agents.review.enabled,
+        reuse: config.agents.review.spawnMode === 'session',
+        thread: config.agents.review.thread,
+        timeoutSeconds: config.agents.review.runTimeoutSeconds ?? 180,
+      },
+      notify: {
+        enabled: config.agents.notify.enabled,
+        reuse: config.agents.notify.spawnMode === 'session',
+        thread: config.agents.notify.thread,
+        timeoutSeconds: 60,
+      },
+    };
+  }
+}
+
 /**
  * Backward-compat derivation: derives reviewMode from v1 fields
  * when no explicit reviewMode was set by the user.
@@ -341,6 +428,15 @@ export function deepMerge(defaultConfig: SkillEvolutionConfig, source: SkillEvol
     result.agents = {
       review: { ...defaultConfig.agents!.review, ...source.agents.review },
       notify: { ...defaultConfig.agents!.notify, ...source.agents.notify },
+    };
+  }
+  if (source.agent) {
+    result.agent = { ...defaultConfig.agent!, ...source.agent };
+  }
+  if (source.sessions) {
+    result.sessions = {
+      review: { ...defaultConfig.sessions!.review, ...source.sessions.review },
+      notify: { ...defaultConfig.sessions!.notify, ...source.sessions.notify },
     };
   }
   if (source.queue) {
