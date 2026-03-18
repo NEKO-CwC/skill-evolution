@@ -14,6 +14,7 @@ export interface SkillEvolutionConfig {
     storageDir: string;
     injectMode: 'system-context' | 'tool-description';
     clearOnSessionEnd: boolean;
+    maxInjectionChars?: number;
   };
   triggers: {
     onToolError: boolean;
@@ -289,6 +290,15 @@ export interface PatchCandidateGenerator {
     result: ReviewResult,
     originalContent: string,
     sessionIds: string[]
+  ): PatchCandidate;
+
+  /**
+   * Generates a PatchCandidate directly from session data, without LLM review.
+   * Used by v2 pipeline to avoid blocking session_end with LLM calls.
+   */
+  generateCandidateFromSession(
+    summary: SessionSummary,
+    originalContent: string
   ): PatchCandidate;
 }
 

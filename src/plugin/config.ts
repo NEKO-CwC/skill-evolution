@@ -21,7 +21,8 @@ export function getDefaultConfig(): SkillEvolutionConfig {
       enabled: true,
       storageDir: '.skill-overlays',
       injectMode: 'system-context',
-      clearOnSessionEnd: true
+      clearOnSessionEnd: true,
+      maxInjectionChars: 2000,
     },
     triggers: {
       onToolError: true,
@@ -188,6 +189,11 @@ export function validateConfig(config: SkillEvolutionConfig): void {
   }
   if (typeof config.sessionOverlay.clearOnSessionEnd !== 'boolean') {
     throw new InvalidConfigError('skillEvolution.sessionOverlay.clearOnSessionEnd must be a boolean.');
+  }
+  if (config.sessionOverlay.maxInjectionChars !== undefined) {
+    if (!Number.isInteger(config.sessionOverlay.maxInjectionChars) || config.sessionOverlay.maxInjectionChars < 1) {
+      throw new InvalidConfigError('skillEvolution.sessionOverlay.maxInjectionChars must be a positive integer.');
+    }
   }
   if (typeof config.triggers.onToolError !== 'boolean') {
     throw new InvalidConfigError('skillEvolution.triggers.onToolError must be a boolean.');

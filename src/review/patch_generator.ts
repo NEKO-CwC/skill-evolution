@@ -8,6 +8,7 @@ import type {
   PatchCandidateGenerator,
   PatchGenerator,
   ReviewResult,
+  SessionSummary,
 } from '../shared/types.js';
 
 /**
@@ -54,6 +55,61 @@ export class PatchGeneratorImpl implements PatchGenerator, PatchCandidateGenerat
       summary: result.justification.slice(0, 200),
       justification: result.justification,
       proposedDiff: result.proposedDiff,
+      originalContent,
+      artifactVersion: 1,
+    };
+  }
+  /**
+   * Generates a PatchCandidate directly from session data, without LLM review.
+   * Constructs proposedDiff from overlay content and justification from event statistics.
+   */
+  public generateCandidateFromSession(
+    summary: SessionSummary,
+    originalContent: string
+  ): PatchCandidate {
+    const now = new Date().toISOString();
+    const id = `patch_${Date.now()}_${randomBytes(4).toString('hex')}`;
+    const { sessionId, skillKey, events, overlays, totalErrors } = summary;
+
+    const correctionCount = events.filter(e => e.eventType === 'user_correction').length;
+    const positiveCount = events.filter(e => e.eventType === 'positive_feedback').length;
+    const totalSignals = totalErrors + correctionCount;
+    const risk = totalSignals <= 1 ? 'low' : totalSignals <= 3 ? 'medium' : 'high' as const;
+
+    const justification = [
+      `Based on ${totalErrors} tool error(s)`,
+      correctionCount > 0 ? `, ${correctionCount} user correction(s)` : '',
+      positiveCount > 0 ? `, ${positiveCount} positive signal(s)` : '',
+      ` in session ${sessionId}.`,
+    ].join('');
+
+    // Build proposedDiff from overlay content (session-local corrections)
+    const overlayDiff = overlays.length > 0
+      ? overlays.map(o => `### ${o.reasoning}\n${o.content}`).join('\n\n')
+      : '(No overlay corrections captured — awaiting agent review)';
+
+    const proposedDiff = [
+      '# Session-Based Patch Proposal',
+      '',
+      '> This patch was generated from session overlay data.',
+      '> It represents suggested improvement directions, not a final diff.',
+      '> Agent review is required to produce the final SKILL.md changes.',
+      '',
+      '## Overlay Corrections',
+      overlayDiff,
+    ].join('\n');
+
+    return {
+      id,
+      skillKey,
+      status: 'queued',
+      risk,
+      sourceSessionIds: [sessionId],
+      createdAt: now,
+      updatedAt: now,
+      summary: justification.slice(0, 200),
+      justification,
+      proposedDiff,
       originalContent,
       artifactVersion: 1,
     };

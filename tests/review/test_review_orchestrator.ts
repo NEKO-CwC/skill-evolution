@@ -111,6 +111,7 @@ describe('review/review_orchestrator', () => {
       const patch = makePatch({ id: 'orch_assisted' });
       await patchQueue.create(patch);
       await orch.enqueue('orch_assisted');
+      await orch.waitForIdle();
 
       const updated = await patchQueue.get('orch_assisted');
       expect(updated.status).toBe('ready');
@@ -131,6 +132,7 @@ describe('review/review_orchestrator', () => {
       const patch = makePatch({ id: 'orch_fallback' });
       await patchQueue.create(patch);
       await orch.enqueue('orch_fallback');
+      await orch.waitForIdle();
 
       // Agent session disabled, so falls back to LLM
       const updated = await patchQueue.get('orch_fallback');

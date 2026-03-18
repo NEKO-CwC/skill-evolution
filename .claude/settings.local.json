@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find:*)",
+      "Bash(tree:*)",
+      "Bash(npm run:*)",
+      "Bash(npm test:*)",
+      "Bash(npx vitest:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git:*)",
+      "Bash(ls:*)",
+      "Bash(command -v openclaw)",
+      "Read(//app/**)",
+      "Read(//usr/local/bin/**)",
+      "Bash(openclaw plugin:*)",
+      "Bash(openclaw:*)",
+      "Bash(kill:*)",
+      "Bash(grep:*)"
+    ]
+  }
+}

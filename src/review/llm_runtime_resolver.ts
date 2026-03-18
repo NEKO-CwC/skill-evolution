@@ -24,13 +24,23 @@ export class LlmRuntimeResolver implements LlmResolver {
     let apiModelId: string = model;
 
     if (explicitProvider) {
-      // Explicit provider: use it for routing, model string goes verbatim to API
+      // Explicit provider: use it for routing, strip provider prefix from model ID
       routingProviderId = explicitProvider;
+      const prefix = explicitProvider + '/';
+      if (model.startsWith(prefix)) {
+        apiModelId = model.slice(prefix.length);
+      }
     } else if (model.includes('/')) {
       // Legacy behavior: split on first slash
       const parts = model.split('/');
       routingProviderId = parts[0];
       apiModelId = parts.slice(1).join('/');
+    }
+
+    // OpenRouter requires the full model path (e.g. "openrouter/hunter-alpha"),
+    // not just the suffix. Restore it when the provider is openrouter.
+    if (routingProviderId === 'openrouter') {
+      apiModelId = model;
     }
 
     this.logger.debug('Resolving LLM provider', {

@@ -23,6 +23,10 @@ export class ReviewOrchestrator {
   private readonly reviewRunner: ReviewRunner;
   private readonly logger = new ConsoleLogger('review_orchestrator');
 
+  /** Serial queue: ensures at most one LLM review runs at a time. */
+  private readonly taskQueue: Array<() => Promise<void>> = [];
+  private processing = false;
+
   public constructor(
     config: SkillEvolutionConfig,
     patchQueue: PatchQueueManager,
@@ -35,7 +39,7 @@ export class ReviewOrchestrator {
 
   /**
    * Enqueue a patch for review. Attempts agent delegation, falls back to LLMReviewRunner.
-   * Non-blocking: returns immediately after fire-and-forget.
+   * LLM fallback runs through a serial queue (concurrency=1) to avoid competing requests.
    */
   public async enqueue(patchId: string): Promise<void> {
     const reviewMode = this.config.reviewMode ?? 'queue-only';
@@ -61,7 +65,58 @@ export class ReviewOrchestrator {
       });
     }
 
-    await this.runLlmFallbackReview(patchId);
+    // Enqueue LLM fallback into serial task queue
+    this.enqueueTask(() => this.runLlmFallbackReview(patchId));
+  }
+
+  /**
+   * Adds a task to the serial queue and starts draining if not already running.
+   */
+  private enqueueTask(task: () => Promise<void>): void {
+    this.taskQueue.push(task);
+    if (!this.processing) {
+      this.drainQueue();
+    }
+  }
+
+  /**
+   * Drains the serial task queue one task at a time (concurrency=1).
+   */
+  private drainQueue(): void {
+    this.processing = true;
+    const next = this.taskQueue.shift();
+    if (!next) {
+      this.processing = false;
+      return;
+    }
+    next()
+      .catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        this.logger.error('Serial queue task failed', { error: msg });
+      })
+      .finally(() => {
+        this.drainQueue();
+      });
+  }
+
+  /**
+   * @internal Waits until the serial task queue is fully drained.
+   * Exposed for testing — production code should not call this.
+   */
+  public waitForIdle(): Promise<void> {
+    if (!this.processing && this.taskQueue.length === 0) {
+      return Promise.resolve();
+    }
+    return new Promise<void>((resolve) => {
+      const check = (): void => {
+        if (!this.processing && this.taskQueue.length === 0) {
+          resolve();
+        } else {
+          setTimeout(check, 10);
+        }
+      };
+      check();
+    });
   }
 
   /**

@@ -260,25 +260,27 @@ describe('review/llm_runtime_resolver', () => {
 
   // ── Explicit provider parameter ──
 
-  it('explicit provider: model string sent verbatim, provider used for routing', () => {
+  it('explicit provider: strips matching provider prefix from model ID', () => {
     process.env.OPENROUTER_API_KEY = 'key';
 
     const resolver = new LlmRuntimeResolver(tempRoot);
     const result = resolver.resolve('openrouter/hunter-alpha', 'openrouter');
 
-    expect(result.modelId).toBe('openrouter/hunter-alpha');
+    // Provider prefix should be stripped to avoid double-prefix in API calls
+    expect(result.modelId).toBe('hunter-alpha');
   });
 
-  it('explicit provider: multi-segment model sent verbatim', () => {
+  it('explicit provider: preserves model ID when prefix does not match', () => {
     process.env.OPENROUTER_API_KEY = 'key';
 
     const resolver = new LlmRuntimeResolver(tempRoot);
     const result = resolver.resolve('anthropic/claude-3.5-sonnet', 'openrouter');
 
+    // Different prefix: model sent verbatim
     expect(result.modelId).toBe('anthropic/claude-3.5-sonnet');
   });
 
-  it('explicit provider: routes to correct file-based provider config', async () => {
+  it('explicit provider: strips prefix and routes to correct file-based provider config', async () => {
     const parentDir = join(tempRoot, 'parent');
     const workspaceDir = join(parentDir, 'workspace');
     await mkdir(workspaceDir, { recursive: true });
@@ -300,7 +302,7 @@ describe('review/llm_runtime_resolver', () => {
     const result = resolver.resolve('openrouter/hunter-alpha', 'openrouter');
 
     expect(result.resolvedFrom).toBe('openclaw-config');
-    expect(result.modelId).toBe('openrouter/hunter-alpha');
+    expect(result.modelId).toBe('hunter-alpha');
     expect(result.apiKey).toBe('or-file-key');
   });
 

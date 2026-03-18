@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { chdir, cwd } from 'node:process';
 import { setTimeout as delay } from 'node:timers/promises';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDefaultConfig } from '../../src/plugin/config.ts';
 import { SkillEvolutionPlugin } from '../../src/plugin/index.ts';
 
@@ -91,6 +91,7 @@ describe('Workflow 2: Session end -> review -> patch generation', () => {
   });
 
   it('runs review on session_end, writes merged content, and clears overlays', async () => {
+    vi.useFakeTimers();
     const plugin = buildPlugin(tempRoot, false);
     const sessionId = 'workflow-2-session';
     const skillKey = 'skill.workflow.2';
@@ -98,6 +99,11 @@ describe('Workflow 2: Session end -> review -> patch generation', () => {
     await plugin.before_prompt_build(sessionId, skillKey, 'BASE');
     await plugin.after_tool_call(sessionId, 'build', 'Error: unresolved symbol', true);
     await plugin.session_end(sessionId);
+
+    // Advance past REVIEW_DELAY_MS and wait for the deferred review
+    await vi.advanceTimersByTimeAsync(6_000);
+    await plugin._pendingLegacyReview;
+    vi.useRealTimers();
 
     const skillFilePath = join('skills', skillKey, 'SKILL.md');
     expect(await pathExists(skillFilePath)).toBe(true);
@@ -128,6 +134,7 @@ describe('Workflow 3: Manual merge blocks auto-write', () => {
   });
 
   it('does not modify SKILL.md and queues patch under .skill-patches', async () => {
+    vi.useFakeTimers();
     const plugin = buildPlugin(tempRoot, true);
     const sessionId = 'workflow-3-session';
     const skillKey = 'skill.workflow.3';
@@ -140,6 +147,10 @@ describe('Workflow 3: Manual merge blocks auto-write', () => {
     await plugin.before_prompt_build(sessionId, skillKey, 'BASE');
     await plugin.after_tool_call(sessionId, 'lint', 'Error: style violation', true);
     await plugin.session_end(sessionId);
+
+    await vi.advanceTimersByTimeAsync(6_000);
+    await plugin._pendingLegacyReview;
+    vi.useRealTimers();
 
     const after = await readFile(skillFilePath, 'utf8');
     expect(after).toBe('ORIGINAL_SKILL_CONTENT');
@@ -172,6 +183,7 @@ describe('Workflow 4: Auto merge writes + backs up + prunes', () => {
   });
 
   it('writes SKILL.md, creates backups each merge, and prunes to maxRollbackVersions=3', async () => {
+    vi.useFakeTimers();
     const plugin = buildPlugin(tempRoot, false, 3);
     const skillKey = 'skill.workflow.4';
     const skillFilePath = join('skills', skillKey, 'SKILL.md');
@@ -184,6 +196,9 @@ describe('Workflow 4: Auto merge writes + backs up + prunes', () => {
       await plugin.before_prompt_build(sessionId, skillKey, 'BASE');
       await plugin.after_tool_call(sessionId, 'test', `Error: iteration-${i}`, true);
       await plugin.session_end(sessionId);
+
+      await vi.advanceTimersByTimeAsync(6_000);
+      await plugin._pendingLegacyReview;
 
       const skillContent = await readFile(skillFilePath, 'utf8');
       expect(skillContent).toContain(`Source Session: ${sessionId}`);
@@ -199,8 +214,10 @@ describe('Workflow 4: Auto merge writes + backs up + prunes', () => {
       );
       expect(backupPayloads.some((entry) => entry.content === previousContent)).toBe(true);
 
-      await delay(2);
+      await vi.advanceTimersByTimeAsync(2);
     }
+
+    vi.useRealTimers();
 
     const finalBackups = (await readdir(backupDir)).filter((name) => name.endsWith('.json'));
     expect(finalBackups).toHaveLength(3);
@@ -223,6 +240,7 @@ describe('Workflow 5: Multi-turn lifecycle split', () => {
   });
 
   it('keeps overlays across agent_end and applies review+cleanup at session_end', async () => {
+    vi.useFakeTimers();
     const plugin = buildPlugin(tempRoot, false);
     const sessionId = 'workflow-5-session';
     const skillKey = 'skill.workflow.5';
@@ -246,6 +264,10 @@ describe('Workflow 5: Multi-turn lifecycle split', () => {
     await plugin.after_tool_call(sessionId, 'shell', 'Error: command failed second', true);
 
     await plugin.session_end(sessionId);
+
+    await vi.advanceTimersByTimeAsync(6_000);
+    await plugin._pendingLegacyReview;
+    vi.useRealTimers();
 
     expect(await pathExists(skillFilePath)).toBe(true);
     const merged = await readFile(skillFilePath, 'utf8');

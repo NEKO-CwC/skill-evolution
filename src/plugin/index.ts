@@ -79,6 +79,12 @@ export class SkillEvolutionPlugin implements PluginHooks {
 
   private readonly sessionStartedAt: Map<string, number>;
 
+  /**
+   * @internal Promise for the pending fire-and-forget legacy review.
+   * Exposed so tests can await completion without real timers.
+   */
+  public _pendingLegacyReview: Promise<void> | null = null;
+
   private workspaceBound: boolean;
 
   /**

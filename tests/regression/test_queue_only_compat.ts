@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { access, mkdtemp, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -45,6 +45,7 @@ describe('Regression: queue-only compat', () => {
   });
 
   it('queue-only with requireHumanMerge=true: patches queued as .md, no auto-merge', async () => {
+    vi.useFakeTimers();
     const plugin = buildPlugin(tempRoot, {
       reviewMode: 'queue-only',
       merge: { requireHumanMerge: true, maxRollbackVersions: 5 },
@@ -61,6 +62,10 @@ describe('Regression: queue-only compat', () => {
     await plugin.after_tool_call(sessionId, 'build', 'Error: compile failed', true);
     await plugin.session_end(sessionId);
 
+    await vi.advanceTimersByTimeAsync(6_000);
+    await plugin._pendingLegacyReview;
+    vi.useRealTimers();
+
     // SKILL.md should be untouched
     const content = await readFile(skillFilePath, 'utf8');
     expect(content).toBe('ORIGINAL_CONTENT');
@@ -73,6 +78,7 @@ describe('Regression: queue-only compat', () => {
   });
 
   it('queue-only with requireHumanMerge=false: auto-merges directly', async () => {
+    vi.useFakeTimers();
     const plugin = buildPlugin(tempRoot, {
       reviewMode: 'queue-only',
       merge: { requireHumanMerge: false, maxRollbackVersions: 5 },
@@ -84,6 +90,10 @@ describe('Regression: queue-only compat', () => {
     await plugin.before_prompt_build(sessionId, skillKey, 'BASE');
     await plugin.after_tool_call(sessionId, 'test', 'Error: assertion failed', true);
     await plugin.session_end(sessionId);
+
+    await vi.advanceTimersByTimeAsync(6_000);
+    await plugin._pendingLegacyReview;
+    vi.useRealTimers();
 
     const skillFilePath = join('skills', skillKey, 'SKILL.md');
     expect(await pathExists(skillFilePath)).toBe(true);

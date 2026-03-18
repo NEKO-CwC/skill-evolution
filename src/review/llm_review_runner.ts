@@ -293,44 +293,82 @@ export class LLMReviewRunner implements RefreshableReviewRunner {
 
     this.logger.debug('Calling LLM endpoint', { endpoint, model: modelId, apiType });
 
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(body)
-    });
+    // Retry with exponential backoff for 5xx errors (max 2 retries)
+    const maxRetries = 2;
+    const timeoutMs = 30_000;
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`LLM API error ${response.status}: ${errorText.slice(0, 200)}`);
-    }
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
 
-    const data = await response.json() as Record<string, unknown>;
-
-    // Parse response based on API type
-    let completion: string;
-    if (apiType === 'anthropic-messages') {
-      const content = data.content as Array<{ text?: string }> | undefined;
-      completion = content?.[0]?.text ?? '';
-    } else {
-      const choices = data.choices as Array<{ message?: { content?: string; reasoning?: string } }> | undefined;
-      const message = choices?.[0]?.message;
-      completion = message?.content ?? '';
-      // Reasoning models (e.g. stepfun/step-3.5-flash) may put output in reasoning field
-      // when max_tokens is exhausted by internal chain-of-thought
-      if (!completion && message?.reasoning) {
-        this.logger.warn('LLM content empty, falling back to reasoning field', {
-          reasoningLength: message.reasoning.length,
-          finishReason: (choices?.[0] as Record<string, unknown>)?.finish_reason
+      try {
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(body),
+          signal: controller.signal,
         });
-        completion = message.reasoning;
+        clearTimeout(timer);
+
+        if (response.status >= 500 && attempt < maxRetries) {
+          const backoffMs = 1000 * Math.pow(2, attempt);
+          this.logger.warn('LLM 5xx error, retrying', {
+            status: response.status,
+            attempt: attempt + 1,
+            backoffMs,
+          });
+          await new Promise(r => setTimeout(r, backoffMs));
+          continue;
+        }
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`LLM API error ${response.status}: ${errorText.slice(0, 200)}`);
+        }
+
+        const data = await response.json() as Record<string, unknown>;
+
+        // Parse response based on API type
+        let completion: string;
+        if (apiType === 'anthropic-messages') {
+          const content = data.content as Array<{ text?: string }> | undefined;
+          completion = content?.[0]?.text ?? '';
+        } else {
+          const choices = data.choices as Array<{ message?: { content?: string; reasoning?: string } }> | undefined;
+          const message = choices?.[0]?.message;
+          completion = message?.content ?? '';
+          // Reasoning models (e.g. stepfun/step-3.5-flash) may put output in reasoning field
+          // when max_tokens is exhausted by internal chain-of-thought
+          if (!completion && message?.reasoning) {
+            this.logger.warn('LLM content empty, falling back to reasoning field', {
+              reasoningLength: message.reasoning.length,
+              finishReason: (choices?.[0] as Record<string, unknown>)?.finish_reason
+            });
+            completion = message.reasoning;
+          }
+        }
+
+        if (!completion) {
+          throw new Error('LLM returned empty completion');
+        }
+
+        return completion;
+      } catch (error: unknown) {
+        clearTimeout(timer);
+        if (error instanceof DOMException && error.name === 'AbortError') {
+          if (attempt < maxRetries) {
+            const backoffMs = 1000 * Math.pow(2, attempt);
+            this.logger.warn('LLM call timed out, retrying', { attempt: attempt + 1, timeoutMs, backoffMs });
+            await new Promise(r => setTimeout(r, backoffMs));
+            continue;
+          }
+          throw new Error(`LLM call timed out after ${timeoutMs}ms (${maxRetries + 1} attempts)`);
+        }
+        throw error;
       }
     }
 
-    if (!completion) {
-      throw new Error('LLM returned empty completion');
-    }
-
-    return completion;
+    throw new Error('LLM call exhausted all retries');
   }
 
   /**

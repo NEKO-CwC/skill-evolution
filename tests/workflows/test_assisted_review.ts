@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { access, mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -58,7 +58,11 @@ describe('Workflow: assisted review e2e', () => {
     await plugin.after_tool_call(sessionId, 'deploy', 'Error: deployment timeout', true);
 
     // Session end creates patch in queue (via legacy path for queue-only)
+    vi.useFakeTimers();
     await plugin.session_end(sessionId);
+    await vi.advanceTimersByTimeAsync(6_000);
+    await plugin._pendingLegacyReview;
+    vi.useRealTimers();
 
     // Verify patch was queued as .md file (legacy queue-only path)
     const patchDir = join('.skill-patches', skillKey);
